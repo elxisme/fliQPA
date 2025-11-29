@@ -5,22 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { supabase } from '../../lib/supabase';
-import { 
-  Calendar,
-  DollarSign,
-  Star,
-  Clock,
-  MapPin,
-  Settings,
-  LogOut,
-  Menu,
-  Plus,
-  TrendingUp,
-  Users,
-  Edit,
-  Eye,
-  EyeOff
-} from 'lucide-react';
+import { Calendar, DollarSign, Star, Clock, MapPin, Settings, LogOut, Menu, Plus, TrendingUp, Users, CreditCard as Edit, Eye, EyeOff } from 'lucide-react';
 
 interface Booking {
   id: string;

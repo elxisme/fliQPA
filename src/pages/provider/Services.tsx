@@ -7,17 +7,7 @@ import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/ui/Toaster';
-import { 
-  ArrowLeft, 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Eye, 
-  EyeOff,
-  DollarSign,
-  Clock,
-  X
-} from 'lucide-react';
+import { ArrowLeft, Plus, CreditCard as Edit, Trash2, Eye, EyeOff, DollarSign, Clock, X } from 'lucide-react';
 
 interface Service {
   id: string;
