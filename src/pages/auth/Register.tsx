@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
@@ -22,9 +22,20 @@ const Register = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
-  
-  const { signUp } = useAuth();
+  const [registrationComplete, setRegistrationComplete] = useState(false);
+
+  const { signUp, user } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (registrationComplete && user) {
+      if (user.role === 'provider') {
+        navigate('/provider/onboarding');
+      } else if (user.role === 'client') {
+        navigate('/client/dashboard');
+      }
+    }
+  }, [user, registrationComplete, navigate]);
 
   const categories = [
     { id: 'companion', name: 'Companion', icon: Users },
@@ -64,17 +75,13 @@ const Register = () => {
       }
 
       if (data?.user) {
-        if (formData.role === 'provider') {
-          navigate('/provider/onboarding');
-        } else {
-          navigate('/client/dashboard');
-        }
+        setRegistrationComplete(true);
       } else {
         setInfo('Account created. Please check your email to confirm before continuing.');
+        setLoading(false);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to create account');
-    } finally {
       setLoading(false);
     }
   };
