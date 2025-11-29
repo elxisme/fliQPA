@@ -93,7 +93,7 @@ const ProviderDashboard = () => {
         .from('providers')
         .select('rating')
         .eq('user_id', user?.id)
-        .single();
+        .maybeSingle();
 
       if (providerError) throw providerError;
 
