@@ -88,7 +88,7 @@ DROP INDEX IF EXISTS idx_users_verification;
 -- Create essential indexes only
 CREATE INDEX IF NOT EXISTS idx_bookings_provider_status_active ON bookings(provider_id, status) WHERE status IN ('REQUESTED', 'ACCEPTED', 'IN_SERVICE');
 CREATE INDEX IF NOT EXISTS idx_bookings_client_recent ON bookings(client_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_providers_verified ON providers(category) WHERE EXISTS (SELECT 1 FROM users WHERE users.id = providers.user_id AND (users.verification_status->>'verified')::boolean = true);
+CREATE INDEX IF NOT EXISTS idx_providers_category ON providers(category);
 CREATE INDEX IF NOT EXISTS idx_services_provider_active ON services(provider_id) WHERE active = true;
 
 -- Fix function security by setting search_path
