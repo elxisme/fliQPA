@@ -57,7 +57,7 @@ const ProviderOnboarding = () => {
 
       if (userError) throw userError;
 
-      navigate('/provider/dashboard');
+      navigate('/provider/add-services');
     } catch (error) {
       console.error('Error completing onboarding:', error);
     } finally {

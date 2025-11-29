@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
+import { ServiceManagementModal } from '../../components/provider/ServiceManagementModal';
 import { supabase } from '../../lib/supabase';
 import { 
   Calendar,
@@ -34,9 +35,12 @@ interface Booking {
 interface Service {
   id: string;
   title: string;
-  price_hour: number;
-  price_day: number;
-  price_week: number;
+  description: string;
+  price_hour?: number;
+  price_day?: number;
+  price_week?: number;
+  min_booking_hours: number;
+  extras?: any[];
   active: boolean;
 }
 
@@ -53,6 +57,8 @@ const ProviderDashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [showServiceModal, setShowServiceModal] = useState(false);
 
   useEffect(() => {
     if (user?.role !== 'provider') {
@@ -64,7 +70,12 @@ const ProviderDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch bookings
+      // Fetch today's bookings
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select(`
@@ -75,8 +86,8 @@ const ProviderDashboard = () => {
           )
         `)
         .eq('provider_id', user?.id)
-        .order('created_at', { ascending: false })
-        .limit(10);
+        .order('requested_start', { ascending: true })
+        .limit(20);
 
       if (bookingsError) throw bookingsError;
 
@@ -130,6 +141,26 @@ const ProviderDashboard = () => {
       case 'CANCELLED': return 'danger';
       default: return 'neutral';
     }
+  };
+
+  const handleToggleService = async (serviceId: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('services')
+        .update({ active: !currentStatus })
+        .eq('id', serviceId);
+
+      if (error) throw error;
+
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Error toggling service status:', error);
+    }
+  };
+
+  const handleEditService = (service: Service) => {
+    setSelectedService(service);
+    setShowServiceModal(true);
   };
 
   return (
@@ -248,10 +279,10 @@ const ProviderDashboard = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Recent Bookings */}
+          {/* Today's Bookings */}
           <div>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-slate-900">Recent Bookings</h2>
+              <h2 className="text-xl font-semibold text-slate-900">Today's Bookings</h2>
               <Button variant="outline" size="sm">
                 View All
               </Button>
@@ -315,7 +346,11 @@ const ProviderDashboard = () => {
           <div>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-slate-900">Your Services</h2>
-              <Button size="sm" className="flex items-center">
+              <Button
+                size="sm"
+                className="flex items-center"
+                onClick={() => navigate('/provider/add-services')}
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Service
               </Button>
@@ -331,7 +366,7 @@ const ProviderDashboard = () => {
                   <p className="text-slate-600 mb-4">
                     Create your first service to start receiving bookings.
                   </p>
-                  <Button>
+                  <Button onClick={() => navigate('/provider/add-services')}>
                     Create Service
                   </Button>
                 </Card>
@@ -356,14 +391,19 @@ const ProviderDashboard = () => {
                         <div>Weekly: ₦{service.price_week.toLocaleString()}</div>
                       )}
                     </div>
-                    
+
                     <div className="flex space-x-2 mt-4">
-                      <Button size="sm" variant="outline">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleEditService(service)}
+                      >
                         Edit
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant={service.active ? 'danger' : 'primary'}
+                        onClick={() => handleToggleService(service.id, service.active)}
                       >
                         {service.active ? 'Deactivate' : 'Activate'}
                       </Button>
@@ -375,6 +415,16 @@ const ProviderDashboard = () => {
           </div>
         </div>
       </div>
+
+      <ServiceManagementModal
+        service={selectedService}
+        isOpen={showServiceModal}
+        onClose={() => {
+          setShowServiceModal(false);
+          setSelectedService(null);
+        }}
+        onUpdate={fetchDashboardData}
+      />
     </div>
   );
 };
