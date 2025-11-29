@@ -6,7 +6,6 @@ import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import ClientDashboard from './pages/client/Dashboard';
 import ProviderDashboard from './pages/provider/Dashboard';
-import ProviderServices from './pages/provider/Services';
 import AdminDashboard from './pages/admin/Dashboard';
 import ProviderProfile from './pages/client/ProviderProfile';
 import BookingFlow from './pages/client/BookingFlow';
@@ -24,7 +23,6 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/client/dashboard" element={<ClientDashboard />} />
             <Route path="/provider/dashboard" element={<ProviderDashboard />} />
-            <Route path="/provider/services" element={<ProviderServices />} />
             <Route path="/provider/onboarding" element={<ProviderOnboarding />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/provider/:id" element={<ProviderProfile />} />
