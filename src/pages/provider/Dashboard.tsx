@@ -16,7 +16,10 @@ import {
   Menu,
   Plus,
   TrendingUp,
-  Users
+  Users,
+  Edit,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 interface Booking {
@@ -64,6 +67,21 @@ const ProviderDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
+      // Get provider ID first
+      const { data: providerData, error: providerError } = await supabase
+        .from('providers')
+        .select('id, rating')
+        .eq('user_id', user?.id)
+        .maybeSingle();
+
+      if (providerError) throw providerError;
+
+      if (!providerData) {
+        // Provider hasn't completed onboarding
+        navigate('/provider/onboarding');
+        return;
+      }
+
       // Fetch bookings
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
@@ -84,18 +102,9 @@ const ProviderDashboard = () => {
       const { data: servicesData, error: servicesError } = await supabase
         .from('services')
         .select('*')
-        .eq('provider_id', user?.id);
+        .eq('provider_id', providerData.id);
 
       if (servicesError) throw servicesError;
-
-      // Fetch provider stats
-      const { data: providerData, error: providerError } = await supabase
-        .from('providers')
-        .select('rating')
-        .eq('user_id', user?.id)
-        .maybeSingle();
-
-      if (providerError) throw providerError;
 
       setBookings(bookingsData || []);
       setServices(servicesData || []);
@@ -118,6 +127,22 @@ const ProviderDashboard = () => {
       navigate('/');
     } catch (error) {
       console.error('Error signing out:', error);
+    }
+  };
+
+  const handleToggleService = async (serviceId: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('services')
+        .update({ active: !currentStatus })
+        .eq('id', serviceId);
+
+      if (error) throw error;
+
+      // Refresh data
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Error toggling service:', error);
     }
   };
 
@@ -247,6 +272,32 @@ const ProviderDashboard = () => {
           </Card>
         </div>
 
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <Button 
+            variant="outline" 
+            className="p-4 h-auto flex flex-col items-center"
+            onClick={() => navigate('/provider/services')}
+          >
+            <Plus className="w-6 h-6 mb-2" />
+            <span>Manage Services</span>
+          </Button>
+          <Button 
+            variant="outline" 
+            className="p-4 h-auto flex flex-col items-center"
+          >
+            <Calendar className="w-6 h-6 mb-2" />
+            <span>Set Availability</span>
+          </Button>
+          <Button 
+            variant="outline" 
+            className="p-4 h-auto flex flex-col items-center"
+          >
+            <Settings className="w-6 h-6 mb-2" />
+            <span>Profile Settings</span>
+          </Button>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Recent Bookings */}
           <div>
@@ -331,7 +382,7 @@ const ProviderDashboard = () => {
                   <p className="text-slate-600 mb-4">
                     Create your first service to start receiving bookings.
                   </p>
-                  <Button>
+                  <Button onClick={() => navigate('/provider/services')}>
                     Create Service
                   </Button>
                 </Card>
@@ -358,14 +409,20 @@ const ProviderDashboard = () => {
                     </div>
                     
                     <div className="flex space-x-2 mt-4">
-                      <Button size="sm" variant="outline">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => navigate('/provider/services')}
+                      >
+                        <Edit className="w-4 h-4 mr-1" />
                         Edit
                       </Button>
                       <Button 
                         size="sm" 
-                        variant={service.active ? 'danger' : 'primary'}
+                        variant="outline"
+                        onClick={() => handleToggleService(service.id, service.active)}
                       >
-                        {service.active ? 'Deactivate' : 'Activate'}
+                        {service.active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </Button>
                     </div>
                   </Card>
