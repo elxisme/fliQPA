@@ -58,20 +58,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchUserProfile = async (authUser: User) => {
     try {
-      console.log('Fetching user profile for:', authUser.id);
-      
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('id', authUser.id)
         .maybeSingle();
 
-      if (error) {
-        console.error('Supabase error fetching user profile:', error);
-        throw error;
-      }
-
-      console.log('User profile data:', data);
+      if (error) throw error;
 
       if (data) {
         setUser({
@@ -83,12 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(null);
       }
     } catch (error) {
-      console.error('Error fetching user profile:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        details: error,
-        supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
-        hasAnonKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY
-      });
+      console.error('Error fetching user profile:', error);
       setUser(null);
     } finally {
       setLoading(false);
@@ -96,16 +84,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signIn = async (email: string, password: string) => {
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        console.error('Sign in error:', error);
-        throw error;
-      }
-    } catch (error) {
-      console.error('Sign in failed:', error);
-      throw error;
-    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
   };
 
   const signUp = async (email: string, password: string, userData: any) => {
@@ -136,13 +116,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-    } catch (error) {
-      console.error('Sign out error:', error);
-      throw error;
-    }
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   };
 
   const value = {
