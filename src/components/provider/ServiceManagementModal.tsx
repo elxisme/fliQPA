@@ -47,6 +47,14 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
   });
   const [newExtra, setNewExtra] = useState({ name: '', price: '' });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  React.useEffect(() => {
+    if (service) {
+      setFormData(service);
+      setError('');
+    }
+  }, [service]);
 
   if (!isOpen) return null;
 
@@ -73,9 +81,14 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
 
     try {
-      const { error } = await supabase
+      if (!service?.id) {
+        throw new Error('Service ID is required');
+      }
+
+      const { error: updateError } = await supabase
         .from('services')
         .update({
           title: formData.title,
@@ -87,14 +100,15 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
           extras: formData.extras && formData.extras.length > 0 ? formData.extras : null,
           active: formData.active
         })
-        .eq('id', service?.id);
+        .eq('id', service.id);
 
-      if (error) throw error;
+      if (updateError) throw updateError;
 
       onUpdate();
       onClose();
-    } catch (error) {
-      console.error('Error updating service:', error);
+    } catch (err: any) {
+      console.error('Error updating service:', err);
+      setError(err.message || 'Failed to update service. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -114,6 +128,12 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+              {error}
+            </div>
+          )}
+
           <Input
             label="Service Title"
             value={formData.title}

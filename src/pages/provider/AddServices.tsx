@@ -41,6 +41,7 @@ const AddServices = () => {
   const [newExtra, setNewExtra] = useState({ name: '', price: '' });
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [error, setError] = useState('');
 
   const handleAddExtra = () => {
     if (newExtra.name && newExtra.price) {
@@ -93,6 +94,8 @@ const AddServices = () => {
     }
 
     setLoading(true);
+    setError('');
+
     try {
       const servicesToInsert = services.map(service => ({
         provider_id: user?.id,
@@ -109,18 +112,19 @@ const AddServices = () => {
         active: true
       }));
 
-      const { error } = await supabase
+      const { error: insertError } = await supabase
         .from('services')
         .insert(servicesToInsert);
 
-      if (error) throw error;
+      if (insertError) throw insertError;
 
       setShowSuccess(true);
       setTimeout(() => {
         navigate('/provider/dashboard');
       }, 2000);
-    } catch (error) {
-      console.error('Error creating services:', error);
+    } catch (err: any) {
+      console.error('Error creating services:', err);
+      setError(err.message || 'Failed to create services. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -221,6 +225,12 @@ const AddServices = () => {
           <h2 className="text-xl font-semibold text-slate-900 mb-6">
             {services.length === 0 ? 'Create Your First Service' : 'Add Another Service'}
           </h2>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+              {error}
+            </div>
+          )}
 
           <div className="space-y-6">
             {/* Service Title */}
@@ -377,11 +387,19 @@ const AddServices = () => {
             {/* Add Service Button */}
             <Button
               onClick={handleAddService}
-              disabled={!currentService.title || !currentService.description ||
-                (currentService.pricingType === 'hourly' && !currentService.priceHour) ||
-                (currentService.pricingType === 'daily' && !currentService.priceDay) ||
-                (currentService.pricingType === 'weekly' && !currentService.priceWeek) ||
-                (currentService.pricingType === 'multiple' && !currentService.priceHour && !currentService.priceDay && !currentService.priceWeek)
+              disabled={
+                !currentService.title ||
+                !currentService.description ||
+                (
+                  (currentService.pricingType === 'hourly' && !currentService.priceHour) ||
+                  (currentService.pricingType === 'daily' && !currentService.priceDay) ||
+                  (currentService.pricingType === 'weekly' && !currentService.priceWeek) ||
+                  (currentService.pricingType === 'multiple' &&
+                    !currentService.priceHour &&
+                    !currentService.priceDay &&
+                    !currentService.priceWeek
+                  )
+                )
               }
               className="w-full"
               variant="outline"
@@ -404,10 +422,9 @@ const AddServices = () => {
           <Button
             onClick={handleSubmit}
             loading={loading}
-            disabled={services.length === 0}
             className="flex-1"
           >
-            {services.length === 0 ? 'Skip to Dashboard' : `Create ${services.length} Service${services.length > 1 ? 's' : ''}`}
+            {services.length === 0 ? 'Go to Dashboard' : `Create ${services.length} Service${services.length > 1 ? 's' : ''}`}
           </Button>
         </div>
 
