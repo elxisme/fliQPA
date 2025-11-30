@@ -4,19 +4,21 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
+import { AvatarUpload } from '../../components/provider/AvatarUpload';
 import { supabase } from '../../lib/supabase';
-import { Upload, CheckCircle } from 'lucide-react';
+import { Upload, CheckCircle, Camera } from 'lucide-react';
 
 const ProviderOnboarding = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [showAvatarUpload, setShowAvatarUpload] = useState(false);
   const [formData, setFormData] = useState({
     category: '',
     bio: '',
     basePrice: '',
-    profilePhoto: null as File | null,
+    avatarUrl: '' as string,
     documents: [] as File[]
   });
 
@@ -38,7 +40,6 @@ const ProviderOnboarding = () => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      // Create provider profile
       const { error: providerError } = await supabase
         .from('providers')
         .insert([{
@@ -49,10 +50,17 @@ const ProviderOnboarding = () => {
 
       if (providerError) throw providerError;
 
-      // Update user base price
+      const updateData: any = {
+        profile_base_price: parseFloat(formData.basePrice)
+      };
+
+      if (formData.avatarUrl) {
+        updateData.avatar_url = formData.avatarUrl;
+      }
+
       const { error: userError } = await supabase
         .from('users')
-        .update({ profile_base_price: parseFloat(formData.basePrice) })
+        .update(updateData)
         .eq('id', user?.id);
 
       if (userError) throw userError;
@@ -160,31 +168,43 @@ const ProviderOnboarding = () => {
             </div>
 
             <div className="space-y-6">
-              {/* Profile Photo */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-3">
                   Profile Photo
                 </label>
-                <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors">
-                  <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
-                  <p className="text-slate-600 mb-2">Click to upload or drag and drop</p>
-                  <p className="text-sm text-slate-500">PNG, JPG up to 5MB</p>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      if (e.target.files?.[0]) {
-                        setFormData({...formData, profilePhoto: e.target.files[0]});
-                      }
-                    }}
-                  />
-                </div>
-                {formData.profilePhoto && (
-                  <p className="text-sm text-green-600 mt-2 flex items-center">
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    {formData.profilePhoto.name}
-                  </p>
+                {formData.avatarUrl ? (
+                  <div className="flex items-center space-x-4">
+                    <img
+                      src={formData.avatarUrl}
+                      alt="Profile"
+                      className="w-24 h-24 rounded-full object-cover border-2 border-slate-200"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm text-green-600 flex items-center mb-2">
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Profile photo uploaded
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowAvatarUpload(true)}
+                      >
+                        <Camera className="w-4 h-4 mr-2" />
+                        Change Photo
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowAvatarUpload(true)}
+                    className="w-full border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors"
+                  >
+                    <Camera className="w-8 h-8 text-slate-400 mx-auto mb-3" />
+                    <p className="text-slate-600 mb-2">Upload Profile Picture</p>
+                    <p className="text-sm text-slate-500">PNG, JPG - Will be cropped to 1:1 ratio</p>
+                  </button>
                 )}
               </div>
 
@@ -267,7 +287,7 @@ const ProviderOnboarding = () => {
                 </div>
                 <div>
                   <span className="font-medium text-slate-700">Documents:</span>{' '}
-                  {formData.profilePhoto ? '✓ Profile photo' : '✗ No profile photo'}{' '}
+                  {formData.avatarUrl ? '✓ Profile photo' : '✗ No profile photo'}{' '}
                   {formData.documents.length > 0 && `+ ${formData.documents.length} verification docs`}
                 </div>
               </div>
@@ -327,6 +347,17 @@ const ProviderOnboarding = () => {
           {renderStep()}
         </Card>
       </div>
+
+      {showAvatarUpload && (
+        <AvatarUpload
+          currentAvatar={formData.avatarUrl}
+          onUploadComplete={(imageUrl) => {
+            setFormData({...formData, avatarUrl: imageUrl});
+            setShowAvatarUpload(false);
+          }}
+          onCancel={() => setShowAvatarUpload(false)}
+        />
+      )}
     </div>
   );
 };
