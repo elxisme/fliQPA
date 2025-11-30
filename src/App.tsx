@@ -11,6 +11,7 @@ import ProviderProfile from './pages/client/ProviderProfile';
 import BookingFlow from './pages/client/BookingFlow';
 import ProviderOnboarding from './pages/provider/Onboarding';
 import AddServices from './pages/provider/AddServices';
+import Services from './pages/provider/Services';
 import { Toaster } from './components/ui/Toaster';
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
             <Route path="/provider/dashboard" element={<ProviderDashboard />} />
             <Route path="/provider/onboarding" element={<ProviderOnboarding />} />
             <Route path="/provider/add-services" element={<AddServices />} />
+            <Route path="/provider/services" element={<Services />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/provider/:id" element={<ProviderProfile />} />
             <Route path="/book/:providerId" element={<BookingFlow />} />

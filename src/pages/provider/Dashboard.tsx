@@ -4,9 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
-import { ServiceManagementModal } from '../../components/provider/ServiceManagementModal';
 import { supabase } from '../../lib/supabase';
-import { 
+import {
   Calendar,
   DollarSign,
   Star,
@@ -15,9 +14,10 @@ import {
   Settings,
   LogOut,
   Menu,
-  Plus,
   TrendingUp,
-  Users
+  Users,
+  Package,
+  ArrowRight
 } from 'lucide-react';
 
 interface Booking {
@@ -32,23 +32,10 @@ interface Booking {
   };
 }
 
-interface Service {
-  id: string;
-  title: string;
-  description: string;
-  price_hour?: number;
-  price_day?: number;
-  price_week?: number;
-  min_booking_hours: number;
-  extras?: any[];
-  active: boolean;
-}
-
 const ProviderDashboard = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
   const [stats, setStats] = useState({
     totalBookings: 0,
     totalEarnings: 0,
@@ -57,8 +44,6 @@ const ProviderDashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [showServiceModal, setShowServiceModal] = useState(false);
 
   useEffect(() => {
     if (user?.role !== 'provider') {
@@ -100,25 +85,25 @@ const ProviderDashboard = () => {
 
       if (providerError) throw providerError;
 
-      // Fetch services using provider_id
-      let servicesData = null;
+      // Fetch services count
+      let activeServicesCount = 0;
       if (providerData?.id) {
-        const { data, error: servicesError } = await supabase
+        const { count, error: servicesError } = await supabase
           .from('services')
-          .select('*')
-          .eq('provider_id', providerData.id);
+          .select('*', { count: 'exact', head: true })
+          .eq('provider_id', providerData.id)
+          .eq('active', true);
 
         if (servicesError) throw servicesError;
-        servicesData = data;
+        activeServicesCount = count || 0;
       }
 
       setBookings(bookingsData || []);
-      setServices(servicesData || []);
       setStats({
         totalBookings: bookingsData?.length || 0,
         totalEarnings: bookingsData?.reduce((sum, booking) => sum + (booking.final_amount || 0), 0) || 0,
         rating: providerData?.rating || 0,
-        activeServices: servicesData?.filter(s => s.active).length || 0
+        activeServices: activeServicesCount
       });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -145,26 +130,6 @@ const ProviderDashboard = () => {
       case 'CANCELLED': return 'danger';
       default: return 'neutral';
     }
-  };
-
-  const handleToggleService = async (serviceId: string, currentStatus: boolean) => {
-    try {
-      const { error } = await supabase
-        .from('services')
-        .update({ active: !currentStatus })
-        .eq('id', serviceId);
-
-      if (error) throw error;
-
-      fetchDashboardData();
-    } catch (error) {
-      console.error('Error toggling service status:', error);
-    }
-  };
-
-  const handleEditService = (service: Service) => {
-    setSelectedService(service);
-    setShowServiceModal(true);
   };
 
   return (
@@ -282,7 +247,8 @@ const ProviderDashboard = () => {
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Main Content */}
+        <div className="space-y-8">
           {/* Today's Bookings */}
           <div>
             <div className="flex items-center justify-between mb-6">
@@ -304,131 +270,107 @@ const ProviderDashboard = () => {
                   </p>
                 </Card>
               ) : (
-                bookings.map((booking) => (
-                  <Card key={booking.id} className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center">
-                        <Users className="w-5 h-5 text-slate-400 mr-2" />
-                        <span className="font-medium text-slate-900">
-                          {booking.client.name}
-                        </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {bookings.map((booking) => (
+                    <Card key={booking.id} className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center">
+                          <Users className="w-5 h-5 text-slate-400 mr-2" />
+                          <span className="font-medium text-slate-900">
+                            {booking.client.name}
+                          </span>
+                        </div>
+                        <Badge variant={getStatusColor(booking.status) as any}>
+                          {booking.status.replace('_', ' ')}
+                        </Badge>
                       </div>
-                      <Badge variant={getStatusColor(booking.status) as any}>
-                        {booking.status.replace('_', ' ')}
-                      </Badge>
-                    </div>
-                    
-                    <div className="flex items-center text-sm text-slate-600 mb-2">
-                      <Clock className="w-4 h-4 mr-2" />
-                      {new Date(booking.requested_start).toLocaleDateString()} at{' '}
-                      {new Date(booking.requested_start).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </div>
-                    
-                    <div className="flex items-center text-sm text-slate-600 mb-3">
-                      <MapPin className="w-4 h-4 mr-2" />
-                      {booking.client.city}
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-slate-900">
-                        ₦{booking.estimated_amount.toLocaleString()}
-                      </span>
-                      <Button size="sm" variant="outline">
-                        View Details
-                      </Button>
-                    </div>
-                  </Card>
-                ))
+
+                      <div className="flex items-center text-sm text-slate-600 mb-2">
+                        <Clock className="w-4 h-4 mr-2" />
+                        {new Date(booking.requested_start).toLocaleDateString()} at{' '}
+                        {new Date(booking.requested_start).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
+
+                      <div className="flex items-center text-sm text-slate-600 mb-3">
+                        <MapPin className="w-4 h-4 mr-2" />
+                        {booking.client.city}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-900">
+                          ₦{booking.estimated_amount.toLocaleString()}
+                        </span>
+                        <Button size="sm" variant="outline">
+                          View Details
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
               )}
             </div>
           </div>
 
-          {/* Services */}
+          {/* Quick Actions */}
           <div>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-slate-900">Your Services</h2>
-              <Button
-                size="sm"
-                className="flex items-center"
-                onClick={() => navigate('/provider/add-services')}
+            <h2 className="text-xl font-semibold text-slate-900 mb-6">Quick Actions</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <Card
+                className="p-6 cursor-pointer hover:shadow-xl transition-all"
+                onClick={() => navigate('/provider/services')}
               >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Service
-              </Button>
-            </div>
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Package className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-slate-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                  Manage Services
+                </h3>
+                <p className="text-slate-600 text-sm mb-3">
+                  View, edit, and manage all your service offerings
+                </p>
+                <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+                  <span className="text-sm text-slate-500">Active Services</span>
+                  <span className="text-lg font-bold text-blue-600">{stats.activeServices}</span>
+                </div>
+              </Card>
 
-            <div className="space-y-4">
-              {services.length === 0 ? (
-                <Card className="p-8 text-center">
-                  <Plus className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-slate-900 mb-2">
-                    No services yet
+              <Card className="p-6 border-2 border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer">
+                <div className="text-center py-4">
+                  <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                    <Calendar className="w-6 h-6 text-slate-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                    View All Bookings
                   </h3>
-                  <p className="text-slate-600 mb-4">
-                    Create your first service to start receiving bookings.
+                  <p className="text-slate-600 text-sm">
+                    See your complete booking history
                   </p>
-                  <Button onClick={() => navigate('/provider/add-services')}>
-                    Create Service
-                  </Button>
-                </Card>
-              ) : (
-                services.map((service) => (
-                  <Card key={service.id} className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-medium text-slate-900">{service.title}</h3>
-                      <Badge variant={service.active ? 'success' : 'neutral'}>
-                        {service.active ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </div>
-                    
-                    <div className="space-y-1 text-sm text-slate-600">
-                      {service.price_hour && (
-                        <div>Hourly: ₦{service.price_hour.toLocaleString()}</div>
-                      )}
-                      {service.price_day && (
-                        <div>Daily: ₦{service.price_day.toLocaleString()}</div>
-                      )}
-                      {service.price_week && (
-                        <div>Weekly: ₦{service.price_week.toLocaleString()}</div>
-                      )}
-                    </div>
+                </div>
+              </Card>
 
-                    <div className="flex space-x-2 mt-4">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEditService(service)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={service.active ? 'danger' : 'primary'}
-                        onClick={() => handleToggleService(service.id, service.active)}
-                      >
-                        {service.active ? 'Deactivate' : 'Activate'}
-                      </Button>
-                    </div>
-                  </Card>
-                ))
-              )}
+              <Card className="p-6 border-2 border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer">
+                <div className="text-center py-4">
+                  <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                    <TrendingUp className="w-6 h-6 text-slate-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                    View Analytics
+                  </h3>
+                  <p className="text-slate-600 text-sm">
+                    Track your performance metrics
+                  </p>
+                </div>
+              </Card>
             </div>
           </div>
         </div>
       </div>
-
-      <ServiceManagementModal
-        service={selectedService}
-        isOpen={showServiceModal}
-        onClose={() => {
-          setShowServiceModal(false);
-          setSelectedService(null);
-        }}
-        onUpdate={fetchDashboardData}
-      />
     </div>
   );
 };
