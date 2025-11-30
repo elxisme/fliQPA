@@ -91,22 +91,26 @@ const ProviderDashboard = () => {
 
       if (bookingsError) throw bookingsError;
 
-      // Fetch services
-      const { data: servicesData, error: servicesError } = await supabase
-        .from('services')
-        .select('*')
-        .eq('provider_id', user?.id);
-
-      if (servicesError) throw servicesError;
-
-      // Fetch provider stats
+      // Fetch provider data first
       const { data: providerData, error: providerError } = await supabase
         .from('providers')
-        .select('rating')
+        .select('id, rating')
         .eq('user_id', user?.id)
         .maybeSingle();
 
       if (providerError) throw providerError;
+
+      // Fetch services using provider_id
+      let servicesData = null;
+      if (providerData?.id) {
+        const { data, error: servicesError } = await supabase
+          .from('services')
+          .select('*')
+          .eq('provider_id', providerData.id);
+
+        if (servicesError) throw servicesError;
+        servicesData = data;
+      }
 
       setBookings(bookingsData || []);
       setServices(servicesData || []);
