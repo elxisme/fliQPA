@@ -126,7 +126,7 @@ const Services = () => {
             </div>
 
             <div className="hidden md:flex items-center space-x-4">
-              <Button variant="ghost" className="flex items-center">
+              <Button variant="ghost" onClick={() => navigate('/provider/settings')} className="flex items-center">
                 <Settings className="w-4 h-4 mr-2" />
                 Settings
               </Button>
@@ -149,7 +149,7 @@ const Services = () => {
         {showMobileMenu && (
           <div className="md:hidden bg-white border-t border-slate-200 px-4 py-2">
             <div className="space-y-2">
-              <Button variant="ghost" className="w-full justify-start">
+              <Button variant="ghost" onClick={() => navigate('/provider/settings')} className="w-full justify-start">
                 <Settings className="w-4 h-4 mr-2" />
                 Settings
               </Button>

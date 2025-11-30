@@ -12,6 +12,7 @@ import BookingFlow from './pages/client/BookingFlow';
 import ProviderOnboarding from './pages/provider/Onboarding';
 import AddServices from './pages/provider/AddServices';
 import Services from './pages/provider/Services';
+import ProviderSettings from './pages/provider/Settings';
 import { Toaster } from './components/ui/Toaster';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -77,6 +78,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Services />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/provider/settings"
+        element={
+          <ProtectedRoute>
+            <ProviderSettings />
           </ProtectedRoute>
         }
       />
