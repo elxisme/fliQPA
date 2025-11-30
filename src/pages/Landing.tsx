@@ -1,11 +1,27 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Shield, Clock, Star, MapPin, Users, Headphones } from 'lucide-react';
 
 const Landing = () => {
   const navigate = useNavigate();
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (user) {
+      if (user.role === 'provider') {
+        navigate('/provider/dashboard', { replace: true });
+      } else if (user.role === 'client') {
+        navigate('/client/dashboard', { replace: true });
+      } else if (user.role === 'admin') {
+        navigate('/admin/dashboard', { replace: true });
+      }
+    }
+  }, [user, loading, navigate]);
 
   const services = [
     {
