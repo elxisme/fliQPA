@@ -14,7 +14,11 @@ const Landing = () => {
 
     if (user) {
       if (user.role === 'provider') {
-        navigate('/provider/dashboard', { replace: true });
+        if (user.hasCompletedOnboarding) {
+          navigate('/provider/dashboard', { replace: true });
+        } else {
+          navigate('/provider/onboarding', { replace: true });
+        }
       } else if (user.role === 'client') {
         navigate('/client/dashboard', { replace: true });
       } else if (user.role === 'admin') {

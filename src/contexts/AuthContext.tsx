@@ -5,6 +5,7 @@ import type { User } from '@supabase/supabase-js';
 interface AuthUser extends User {
   role?: string;
   name?: string;
+  hasCompletedOnboarding?: boolean;
 }
 
 interface AuthContextType {
@@ -67,10 +68,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) throw error;
 
       if (data) {
+        let hasCompletedOnboarding = true;
+
+        if (data.role === 'provider') {
+          const { data: providerData, error: providerError } = await supabase
+            .from('providers')
+            .select('id')
+            .eq('user_id', authUser.id)
+            .maybeSingle();
+
+          if (providerError && providerError.code !== 'PGRST116') {
+            throw providerError;
+          }
+
+          hasCompletedOnboarding = !!providerData;
+        }
+
         setUser({
           ...authUser,
           role: data.role,
-          name: data.name
+          name: data.name,
+          hasCompletedOnboarding
         });
       } else {
         setUser(null);

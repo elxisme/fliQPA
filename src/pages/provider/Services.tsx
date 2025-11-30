@@ -43,6 +43,10 @@ const Services = () => {
       navigate('/');
       return;
     }
+    if (!user.hasCompletedOnboarding) {
+      navigate('/provider/onboarding');
+      return;
+    }
     fetchServices();
   }, [user, navigate]);
 

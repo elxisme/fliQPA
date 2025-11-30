@@ -50,6 +50,10 @@ const ProviderDashboard = () => {
       navigate('/');
       return;
     }
+    if (!user.hasCompletedOnboarding) {
+      navigate('/provider/onboarding');
+      return;
+    }
     fetchDashboardData();
   }, [user, navigate]);
 

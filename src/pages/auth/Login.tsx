@@ -20,7 +20,11 @@ const Login = () => {
       if (user.role === 'admin') {
         navigate('/admin/dashboard');
       } else if (user.role === 'provider') {
-        navigate('/provider/dashboard');
+        if (user.hasCompletedOnboarding) {
+          navigate('/provider/dashboard');
+        } else {
+          navigate('/provider/onboarding');
+        }
       } else if (user.role === 'client') {
         navigate('/client/dashboard');
       }
