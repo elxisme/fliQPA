@@ -318,27 +318,29 @@ const ProviderDashboard = () => {
           <div>
             <h2 className="text-xl font-semibold text-slate-900 mb-6">Quick Actions</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <Card
-                className="p-6 cursor-pointer hover:shadow-xl transition-all"
+              <button
                 onClick={() => navigate('/provider/services')}
+                className="text-left"
               >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Package className="w-6 h-6 text-blue-600" />
+                <Card className="p-6 cursor-pointer hover:shadow-xl transition-all h-full">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Package className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-slate-400" />
                   </div>
-                  <ArrowRight className="w-5 h-5 text-slate-400" />
-                </div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                  Manage Services
-                </h3>
-                <p className="text-slate-600 text-sm mb-3">
-                  View, edit, and manage all your service offerings
-                </p>
-                <div className="flex items-center justify-between pt-3 border-t border-slate-200">
-                  <span className="text-sm text-slate-500">Active Services</span>
-                  <span className="text-lg font-bold text-blue-600">{stats.activeServices}</span>
-                </div>
-              </Card>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                    Manage Services
+                  </h3>
+                  <p className="text-slate-600 text-sm mb-3">
+                    View, edit, and manage all your service offerings
+                  </p>
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+                    <span className="text-sm text-slate-500">Active Services</span>
+                    <span className="text-lg font-bold text-blue-600">{stats.activeServices}</span>
+                  </div>
+                </Card>
+              </button>
 
               <Card className="p-6 border-2 border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer">
                 <div className="text-center py-4">
