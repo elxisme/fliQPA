@@ -37,9 +37,82 @@ const ProviderOnboarding = () => {
     if (step > 1) setStep(step - 1);
   };
 
+  const uploadAvatar = async (avatarDataUrl: string): Promise<string | null> => {
+    if (!user?.id) return null;
+
+    try {
+      const base64Data = avatarDataUrl.split(',')[1];
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+      const fileName = `${user.id}/avatar_${Date.now()}.jpg`;
+      const { error: uploadError, data } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, blob, {
+          contentType: 'image/jpeg',
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      return publicUrlData.publicUrl;
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      return null;
+    }
+  };
+
+  const uploadDocuments = async (documents: File[]): Promise<string[]> => {
+    if (!user?.id || documents.length === 0) return [];
+
+    const uploadedUrls: string[] = [];
+
+    for (const doc of documents) {
+      try {
+        const fileExt = doc.name.split('.').pop();
+        const fileName = `${user.id}/document_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('verification_documents')
+          .upload(fileName, doc, {
+            contentType: doc.type,
+            upsert: false
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase.storage
+          .from('verification_documents')
+          .getPublicUrl(fileName);
+
+        uploadedUrls.push(publicUrlData.publicUrl);
+      } catch (error) {
+        console.error('Error uploading document:', doc.name, error);
+      }
+    }
+
+    return uploadedUrls;
+  };
+
   const handleSubmit = async () => {
     setLoading(true);
     try {
+      let avatarPublicUrl = null;
+      if (formData.avatarUrl) {
+        avatarPublicUrl = await uploadAvatar(formData.avatarUrl);
+      }
+
+      const documentUrls = await uploadDocuments(formData.documents);
+
       const { error: providerError } = await supabase
         .from('providers')
         .insert([{
@@ -54,8 +127,16 @@ const ProviderOnboarding = () => {
         profile_base_price: parseFloat(formData.basePrice)
       };
 
-      if (formData.avatarUrl) {
-        updateData.avatar_url = formData.avatarUrl;
+      if (avatarPublicUrl) {
+        updateData.avatar_url = avatarPublicUrl;
+      }
+
+      if (documentUrls.length > 0) {
+        updateData.verification_status = {
+          verified: false,
+          documents: documentUrls,
+          submitted_at: new Date().toISOString()
+        };
       }
 
       const { error: userError } = await supabase
@@ -213,10 +294,10 @@ const ProviderOnboarding = () => {
                 <label className="block text-sm font-medium text-slate-700 mb-3">
                   Verification Documents
                 </label>
-                <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors">
+                <label className="block border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors cursor-pointer">
                   <Upload className="w-8 h-8 text-slate-400 mx-auto mb-3" />
                   <p className="text-slate-600 mb-2">Upload ID, certificates, or references</p>
-                  <p className="text-sm text-slate-500">Multiple files allowed</p>
+                  <p className="text-sm text-slate-500">Multiple files allowed (PDF, JPG, PNG)</p>
                   <input
                     type="file"
                     multiple
@@ -225,20 +306,37 @@ const ProviderOnboarding = () => {
                     onChange={(e) => {
                       if (e.target.files) {
                         setFormData({
-                          ...formData, 
+                          ...formData,
                           documents: Array.from(e.target.files)
                         });
                       }
                     }}
                   />
-                </div>
+                </label>
                 {formData.documents.length > 0 && (
-                  <div className="mt-2 space-y-1">
+                  <div className="mt-3 space-y-2">
+                    <p className="text-sm font-medium text-slate-700">
+                      {formData.documents.length} {formData.documents.length === 1 ? 'file' : 'files'} selected:
+                    </p>
                     {formData.documents.map((file, index) => (
-                      <p key={index} className="text-sm text-green-600 flex items-center">
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        {file.name}
-                      </p>
+                      <div key={index} className="flex items-center justify-between p-2 bg-green-50 rounded-lg">
+                        <p className="text-sm text-green-700 flex items-center">
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          {file.name}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData({
+                              ...formData,
+                              documents: formData.documents.filter((_, i) => i !== index)
+                            });
+                          }}
+                          className="text-red-600 hover:text-red-700 text-sm"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}
