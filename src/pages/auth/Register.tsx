@@ -101,7 +101,7 @@ const Register = () => {
                 type="button"
                 className={`w-full p-4 border-2 rounded-lg transition-all ${
                   formData.role === 'client' 
-                    ? 'border-blue-600 bg-blue-50' 
+                    ? 'border-[#5d866c] bg-[#5d866c]/10' 
                     : 'border-slate-200 hover:border-slate-300'
                 }`}
                 onClick={() => setFormData({...formData, role: 'client'})}
@@ -116,7 +116,7 @@ const Register = () => {
                 type="button"
                 className={`w-full p-4 border-2 rounded-lg transition-all ${
                   formData.role === 'provider' 
-                    ? 'border-blue-600 bg-blue-50' 
+                    ? 'border-[#5d866c] bg-[#5d866c]/10' 
                     : 'border-slate-200 hover:border-slate-300'
                 }`}
                 onClick={() => setFormData({...formData, role: 'provider'})}
@@ -215,7 +215,7 @@ const Register = () => {
                       type="button"
                       className={`p-4 border-2 rounded-lg transition-all text-center ${
                         formData.category === category.id 
-                          ? 'border-blue-600 bg-blue-50' 
+                          ? 'border-[#5d866c] bg-[#5d866c]/10' 
                           : 'border-slate-200 hover:border-slate-300'
                       }`}
                       onClick={() => setFormData({...formData, category: category.id})}
@@ -260,7 +260,7 @@ const Register = () => {
               </div>
             )}
             {info && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm">
+              <div className="p-3 bg-[#5d866c]/10 border border-[#5d866c]/30 rounded-lg text-[#5d866c] text-sm">
                 {info}
               </div>
             )}
@@ -320,7 +320,7 @@ const Register = () => {
 
         {/* Header */}
         <div className="text-center">
-          <div className="text-3xl font-bold text-blue-600 mb-2">fliQ</div>
+          <div className="text-3xl font-bold text-[#5d866c] mb-2">fliQ</div>
           <h1 className="text-2xl font-bold text-slate-900">Create Account</h1>
           
           {/* Progress Indicator */}
@@ -329,7 +329,7 @@ const Register = () => {
               <div
                 key={i}
                 className={`w-2 h-2 rounded-full transition-all ${
-                  i <= step ? 'bg-blue-600' : 'bg-slate-300'
+                  i <= step ? 'bg-[#5d866c]' : 'bg-slate-300'
                 }`}
               />
             ))}
@@ -343,7 +343,7 @@ const Register = () => {
           <div className="mt-6 text-center">
             <p className="text-slate-600">
               Already have an account?{' '}
-              <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium">
+              <Link to="/login" className="text-[#5d866c] hover:text-[#4d7159] font-medium">
                 Sign in here
               </Link>
             </p>

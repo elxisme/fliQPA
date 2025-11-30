@@ -32,25 +32,25 @@ const Landing = () => {
       title: 'Professional Companions',
       description: 'Verified companions for events, dinners, and social occasions',
       icon: Users,
-      color: 'bg-blue-500'
+      color: 'bg-[#5d866c]'
     },
     {
       title: 'Security & Bouncers',
       description: 'Professional security personnel for events and venues',
       icon: Shield,
-      color: 'bg-green-500'
+      color: 'bg-[#d9a633]'
     },
     {
       title: 'Personal Bodyguards',
       description: 'Trained personal protection specialists',
       icon: Shield,
-      color: 'bg-red-500'
+      color: 'bg-[#5d866c]'
     },
     {
       title: 'Personal Assistants',
       description: 'Professional assistants for business and personal tasks',
       icon: Headphones,
-      color: 'bg-purple-500'
+      color: 'bg-[#d9a633]'
     }
   ];
 
@@ -84,7 +84,7 @@ const Landing = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <div className="text-2xl font-bold text-blue-600">fliQ</div>
+              <div className="text-2xl font-bold text-[#5d866c]">fliQ</div>
             </div>
             <div className="flex space-x-4">
               <Button 
@@ -105,15 +105,14 @@ const Landing = () => {
       </header>
 
       {/* Hero Section */}
-      <section className="relative bg-gradient-to-r from-blue-600 via-blue-700 to-cyan-600 text-white">
-        <div className="absolute inset-0 bg-black/20"></div>
+      <section className="relative bg-[#5d866c] text-white">
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
           <div className="text-center">
             <h1 className="text-4xl md:text-6xl font-bold mb-6">
               Professional Services
-              <span className="block text-cyan-300">On-Demand</span>
+              <span className="block text-[#d9a633]">On-Demand</span>
             </h1>
-            <p className="text-xl md:text-2xl mb-8 text-blue-100 max-w-3xl mx-auto">
+            <p className="text-xl md:text-2xl mb-8 text-white/90 max-w-3xl mx-auto">
               Connect with verified companions, security professionals, bodyguards, and personal assistants instantly.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -129,7 +128,7 @@ const Landing = () => {
                 size="lg" 
                 variant="outline"
                 onClick={() => navigate('/register?role=provider')}
-                className="text-lg px-8 py-4 bg-white/10 border-white text-white hover:bg-white hover:text-blue-600"
+                className="text-lg px-8 py-4 bg-white/10 border-white text-white hover:bg-white hover:text-[#5d866c]"
               >
                 Become a Provider
               </Button>
@@ -186,7 +185,7 @@ const Landing = () => {
               const Icon = feature.icon;
               return (
                 <div key={index} className="text-center">
-                  <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <div className="w-16 h-16 bg-[#5d866c] rounded-full flex items-center justify-center mx-auto mb-4">
                     <Icon className="w-8 h-8 text-white" />
                   </div>
                   <h3 className="text-xl font-semibold text-slate-900 mb-2">
@@ -203,12 +202,12 @@ const Landing = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-r from-slate-900 to-blue-900 text-white">
+      <section className="py-20 bg-slate-900 text-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-6">
             Ready to Get Started?
           </h2>
-          <p className="text-xl mb-8 text-slate-300">
+          <p className="text-xl mb-8 text-white/80">
             Join thousands of satisfied clients and professional providers
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -216,7 +215,7 @@ const Landing = () => {
               size="lg" 
               variant="primary"
               onClick={() => navigate('/register?role=client')}
-              className="text-lg px-8 py-4 bg-blue-600 hover:bg-blue-700"
+              className="text-lg px-8 py-4 bg-[#5d866c] hover:bg-[#4d7159]"
             >
               Start Booking Now
             </Button>
@@ -236,7 +235,7 @@ const Landing = () => {
       <footer className="bg-slate-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <div className="text-3xl font-bold text-blue-400 mb-4">fliQ</div>
+            <div className="text-3xl font-bold text-[#d9a633] mb-4">fliQ</div>
             <p className="text-slate-400 mb-8">
               Professional services on-demand. Safe, verified, reliable.
             </p>

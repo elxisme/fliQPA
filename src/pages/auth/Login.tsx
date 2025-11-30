@@ -58,7 +58,7 @@ const Login = () => {
 
         {/* Header */}
         <div className="text-center">
-          <div className="text-3xl font-bold text-blue-600 mb-2">fliQ</div>
+          <div className="text-3xl font-bold text-[#5d866c] mb-2">fliQ</div>
           <h1 className="text-2xl font-bold text-slate-900">Welcome Back</h1>
           <p className="text-slate-600 mt-2">Sign in to your account</p>
         </div>
@@ -102,13 +102,13 @@ const Login = () => {
           <div className="mt-6 text-center">
             <p className="text-slate-600">
               Don't have an account?{' '}
-              <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium">
+              <Link to="/register" className="text-[#5d866c] hover:text-[#4d7159] font-medium">
                 Sign up here
               </Link>
             </p>
             <p className="text-slate-600 mt-2">
               Forgot your password?{' '}
-              <Link to="/reset-password" className="text-blue-600 hover:text-blue-700 font-medium">
+              <Link to="/reset-password" className="text-[#5d866c] hover:text-[#4d7159] font-medium">
                 Reset it
               </Link>
             </p>
