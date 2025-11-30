@@ -97,8 +97,23 @@ const AddServices = () => {
     setError('');
 
     try {
+      if (!user?.id) {
+        throw new Error('User ID not found');
+      }
+
+      const { data: providerData, error: providerError } = await supabase
+        .from('providers')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (providerError) throw providerError;
+      if (!providerData) {
+        throw new Error('Provider profile not found. Please complete your provider profile first.');
+      }
+
       const servicesToInsert = services.map(service => ({
-        provider_id: user?.id,
+        provider_id: providerData.id,
         title: service.title,
         description: service.description,
         price_hour: service.pricingType === 'hourly' || service.pricingType === 'multiple'
