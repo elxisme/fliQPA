@@ -152,15 +152,15 @@ const ClientDashboard = () => {
             id,
             category,
             bio,
-            rating
-          ),
-          services (
-            id,
-            title,
-            price_hour,
-            price_day,
-            price_week,
-            active
+            rating,
+            services (
+              id,
+              title,
+              price_hour,
+              price_day,
+              price_week,
+              active
+            )
           )
         `, { count: 'exact' })
         .eq('role', 'provider')
@@ -199,7 +199,9 @@ const ClientDashboard = () => {
       }
 
       const formattedProviders = data.map(user => {
-        const activeServices = user.services?.filter(s => s.active) || [];
+        const providerData = user.providers?.[0];
+        const services = providerData?.services || [];
+        const activeServices = services.filter(s => s.active) || [];
         const minPrice = activeServices.length > 0
           ? Math.min(...activeServices.map(s => s.price_hour || s.price_day || s.price_week).filter(Boolean))
           : user.profile_base_price || 0;
@@ -207,9 +209,9 @@ const ClientDashboard = () => {
         return {
           id: user.id,
           name: user.name,
-          category: user.providers?.[0]?.category || '',
-          bio: user.providers?.[0]?.bio || '',
-          rating: user.providers?.[0]?.rating || 0,
+          category: providerData?.category || '',
+          bio: providerData?.bio || '',
+          rating: providerData?.rating || 0,
           city: user.city,
           profile_base_price: user.profile_base_price || 0,
           verification_status: user.verification_status,
@@ -613,10 +615,7 @@ const ClientDashboard = () => {
             <p className="text-slate-600 mb-4">
               Try adjusting your search or filters
             </p>
-            <Button onClick={() => {
-              setSearchQuery('');
-              setSelectedCategory('');
-            }}>
+            <Button onClick={handleClearFilters}>
               Clear Filters
             </Button>
           </div>
