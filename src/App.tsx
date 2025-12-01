@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Landing from './pages/Landing';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import ResetPassword from './pages/auth/ResetPassword';
+import UpdatePassword from './pages/auth/UpdatePassword';
 import ClientDashboard from './pages/client/Dashboard';
 import ProviderDashboard from './pages/provider/Dashboard';
 import AdminDashboard from './pages/admin/Dashboard';
@@ -41,6 +43,8 @@ function AppRoutes() {
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/update-password" element={<UpdatePassword />} />
       <Route
         path="/client/dashboard"
         element={
