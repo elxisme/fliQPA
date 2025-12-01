@@ -121,7 +121,7 @@ const Services = () => {
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back
               </Button>
-              <div className="text-2xl font-bold text-blue-600">fliQ</div>
+              <img src="/fliQ_logo.png" alt="fliQ" className="h-8" />
               <Badge variant="info" className="ml-3">Provider</Badge>
             </div>
 

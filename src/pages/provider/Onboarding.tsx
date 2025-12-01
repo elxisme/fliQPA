@@ -423,7 +423,7 @@ const ProviderOnboarding = () => {
       <div className="w-full max-w-2xl space-y-6">
         {/* Header */}
         <div className="text-center">
-          <div className="text-3xl font-bold text-blue-600 mb-2">fliQ</div>
+          <img src="/fliQ_logo.png" alt="fliQ" className="h-10 mx-auto mb-2" />
           <h1 className="text-2xl font-bold text-slate-900">Provider Onboarding</h1>
           
           {/* Progress Indicator */}

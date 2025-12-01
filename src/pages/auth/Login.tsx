@@ -58,7 +58,7 @@ const Login = () => {
 
         {/* Header */}
         <div className="text-center">
-          <div className="text-3xl font-bold text-[#5d866c] mb-2">fliQ</div>
+          <img src="/fliQ_logo.png" alt="fliQ" className="h-10 mx-auto mb-2" />
           <h1 className="text-2xl font-bold text-slate-900">Welcome Back</h1>
           <p className="text-slate-600 mt-2">Sign in to your account</p>
         </div>

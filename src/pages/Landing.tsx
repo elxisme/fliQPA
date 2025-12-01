@@ -84,7 +84,7 @@ const Landing = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <div className="text-2xl font-bold text-[#5d866c]">fliQ</div>
+              <img src="/fliQ_logo.png" alt="fliQ" className="h-8" />
             </div>
             <div className="flex space-x-4">
               <Button 
@@ -235,7 +235,7 @@ const Landing = () => {
       <footer className="bg-slate-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <div className="text-3xl font-bold text-[#d9a633] mb-4">fliQ</div>
+            <img src="/fliQ_logo.png" alt="fliQ" className="h-12 mx-auto mb-4" />
             <p className="text-slate-400 mb-8">
               Professional services on-demand. Safe, verified, reliable.
             </p>
