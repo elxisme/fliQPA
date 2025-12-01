@@ -19,8 +19,11 @@ import {
   Settings as SettingsIcon,
   HelpCircle,
   ChevronRight,
-  X
+  X,
+  Check
 } from 'lucide-react';
+import { AvatarUpload } from '../../components/provider/AvatarUpload';
+import { Input } from '../../components/ui/Input';
 
 interface SettingsSection {
   id: string;
@@ -283,6 +286,176 @@ const ProviderSettings = () => {
 };
 
 const ProfileSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [showAvatarUpload, setShowAvatarUpload] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+  const [formData, setFormData] = useState({
+    name: '',
+    phone: '',
+    city: '',
+    bio: '',
+    gender: '',
+    avatarUrl: ''
+  });
+
+  useEffect(() => {
+    fetchProfileData();
+  }, [user]);
+
+  const fetchProfileData = async () => {
+    if (!user?.id) return;
+
+    setLoading(true);
+    try {
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('name, phone, city, avatar_url, gender')
+        .eq('id', user.id)
+        .single();
+
+      if (userError) throw userError;
+
+      const { data: providerData, error: providerError } = await supabase
+        .from('providers')
+        .select('bio')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (providerError && providerError.code !== 'PGRST116') {
+        throw providerError;
+      }
+
+      setFormData({
+        name: userData.name || '',
+        phone: userData.phone || '',
+        city: userData.city || '',
+        bio: providerData?.bio || '',
+        gender: userData.gender || '',
+        avatarUrl: userData.avatar_url || ''
+      });
+    } catch (err: any) {
+      console.error('Error fetching profile:', err);
+      setError(err.message || 'Failed to load profile data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const uploadAvatar = async (avatarDataUrl: string): Promise<string | null> => {
+    if (!user?.id) return null;
+
+    try {
+      const base64Data = avatarDataUrl.split(',')[1];
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+      const fileName = `${user.id}/avatar_${Date.now()}.jpg`;
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, blob, {
+          contentType: 'image/jpeg',
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      return publicUrlData.publicUrl;
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      return null;
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user?.id) return;
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      let avatarPublicUrl = formData.avatarUrl;
+
+      if (formData.avatarUrl && formData.avatarUrl.startsWith('data:')) {
+        const uploadedUrl = await uploadAvatar(formData.avatarUrl);
+        if (uploadedUrl) {
+          avatarPublicUrl = uploadedUrl;
+        }
+      }
+
+      const { error: userError } = await supabase
+        .from('users')
+        .update({
+          name: formData.name,
+          phone: formData.phone,
+          city: formData.city,
+          avatar_url: avatarPublicUrl
+        })
+        .eq('id', user.id);
+
+      if (userError) throw userError;
+
+      const { data: providerData, error: providerCheckError } = await supabase
+        .from('providers')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (providerCheckError && providerCheckError.code !== 'PGRST116') {
+        throw providerCheckError;
+      }
+
+      if (providerData?.id) {
+        const { error: providerError } = await supabase
+          .from('providers')
+          .update({ bio: formData.bio })
+          .eq('user_id', user.id);
+
+        if (providerError) throw providerError;
+      }
+
+      setSuccess('Profile updated successfully');
+
+      setTimeout(() => {
+        setSuccess('');
+      }, 3000);
+
+    } catch (err: any) {
+      console.error('Error saving profile:', err);
+      setError(err.message || 'Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div>
+        <div className="p-6 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-slate-900">Profile Information</h2>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors md:hidden">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-12 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="p-6 border-b border-slate-200 flex items-center justify-between">
@@ -291,16 +464,159 @@ const ProfileSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <X className="w-5 h-5" />
         </button>
       </div>
-      <div className="p-6">
-        <p className="text-slate-600 mb-4">
-          Update your personal details and profile information
-        </p>
-        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-          <p className="text-sm text-blue-800">
-            Profile settings functionality will be implemented here.
+
+      <div className="p-6 space-y-6">
+        {success && (
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-600 text-sm flex items-center">
+            <Check className="w-4 h-4 mr-2" />
+            {success}
+          </div>
+        )}
+
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-3">
+            Profile Photo
+          </label>
+          {formData.avatarUrl ? (
+            <div className="flex items-center space-x-4">
+              <img
+                src={formData.avatarUrl}
+                alt="Profile"
+                className="w-20 h-20 rounded-full object-cover border-2 border-slate-200"
+              />
+              <div>
+                <p className="text-sm text-slate-600 mb-2">Current profile photo</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAvatarUpload(true)}
+                >
+                  <User className="w-4 h-4 mr-2" />
+                  Change Photo
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowAvatarUpload(true)}
+              className="w-full border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors"
+            >
+              <User className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+              <p className="text-slate-600 mb-1">Upload Profile Picture</p>
+              <p className="text-sm text-slate-500">PNG or JPG</p>
+            </button>
+          )}
+        </div>
+
+        <Input
+          label="Full Name"
+          value={formData.name}
+          onChange={(e) => setFormData({...formData, name: e.target.value})}
+          placeholder="Enter your full name"
+          required
+        />
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Email Address
+          </label>
+          <input
+            type="email"
+            value={user?.email || ''}
+            disabled
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-500 cursor-not-allowed"
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            Email cannot be changed as it is linked to your authentication
           </p>
         </div>
+
+        <Input
+          label="Phone Number"
+          type="tel"
+          value={formData.phone}
+          onChange={(e) => setFormData({...formData, phone: e.target.value})}
+          placeholder="Enter your phone number"
+          required
+        />
+
+        <Input
+          label="City / Location"
+          value={formData.city}
+          onChange={(e) => setFormData({...formData, city: e.target.value})}
+          placeholder="Enter your city"
+          required
+        />
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Bio / About Me
+          </label>
+          <textarea
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+            rows={4}
+            value={formData.bio}
+            onChange={(e) => setFormData({...formData, bio: e.target.value})}
+            placeholder="Tell clients about your experience and expertise..."
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Gender
+          </label>
+          <select
+            value={formData.gender}
+            disabled
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-500 cursor-not-allowed"
+          >
+            <option value="">Not specified</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+            <option value="prefer_not_to_say">Prefer not to say</option>
+          </select>
+          <p className="text-xs text-slate-500 mt-1">
+            Gender is set during registration and cannot be changed
+          </p>
+        </div>
+
+        <div className="flex space-x-3 pt-4 border-t border-slate-200">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            loading={saving}
+            className="flex-1"
+          >
+            Save Changes
+          </Button>
+        </div>
       </div>
+
+      {showAvatarUpload && (
+        <AvatarUpload
+          currentAvatar={formData.avatarUrl}
+          onUploadComplete={(imageUrl) => {
+            setFormData({...formData, avatarUrl: imageUrl});
+            setShowAvatarUpload(false);
+          }}
+          onCancel={() => setShowAvatarUpload(false)}
+        />
+      )}
     </div>
   );
 };
