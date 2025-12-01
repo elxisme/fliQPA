@@ -1629,6 +1629,179 @@ const LocationSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 };
 
 const NotificationSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+  const [providerId, setProviderId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    bookingRequests: true,
+    newMessages: true,
+    paymentReceived: true,
+    systemUpdates: true,
+    disputeAlerts: true
+  });
+
+  useEffect(() => {
+    fetchNotificationPreferences();
+  }, [user]);
+
+  const fetchNotificationPreferences = async () => {
+    if (!user?.id) return;
+
+    setLoading(true);
+    try {
+      const { data: providerData, error: providerError } = await supabase
+        .from('providers')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (providerError && providerError.code !== 'PGRST116') {
+        throw providerError;
+      }
+
+      if (!providerData) {
+        setError('Provider profile not found');
+        return;
+      }
+
+      setProviderId(providerData.id);
+
+      const { data: notificationData, error: notificationError } = await supabase
+        .from('notification_preferences')
+        .select('*')
+        .eq('provider_id', providerData.id)
+        .maybeSingle();
+
+      if (notificationError && notificationError.code !== 'PGRST116') {
+        throw notificationError;
+      }
+
+      if (notificationData) {
+        setFormData({
+          bookingRequests: notificationData.booking_requests ?? true,
+          newMessages: notificationData.new_messages ?? true,
+          paymentReceived: notificationData.payment_received ?? true,
+          systemUpdates: notificationData.system_updates ?? true,
+          disputeAlerts: notificationData.dispute_alerts ?? true
+        });
+      }
+    } catch (err: any) {
+      console.error('Error fetching notification preferences:', err);
+      setError(err.message || 'Failed to load notification preferences');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user?.id || !providerId) return;
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const { data: existingData } = await supabase
+        .from('notification_preferences')
+        .select('id')
+        .eq('provider_id', providerId)
+        .maybeSingle();
+
+      const notificationData = {
+        provider_id: providerId,
+        booking_requests: true,
+        new_messages: formData.newMessages,
+        payment_received: formData.paymentReceived,
+        system_updates: formData.systemUpdates,
+        dispute_alerts: formData.disputeAlerts
+      };
+
+      if (existingData) {
+        const { error: updateError } = await supabase
+          .from('notification_preferences')
+          .update(notificationData)
+          .eq('provider_id', providerId);
+
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from('notification_preferences')
+          .insert([notificationData]);
+
+        if (insertError) throw insertError;
+      }
+
+      setSuccess('Notification preferences updated successfully');
+
+      setTimeout(() => {
+        setSuccess('');
+      }, 3000);
+
+    } catch (err: any) {
+      console.error('Error saving notification preferences:', err);
+      setError(err.message || 'Failed to update notification preferences');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const notificationTypes = [
+    {
+      id: 'bookingRequests',
+      title: 'Booking Requests',
+      description: 'Get notified when clients request your services',
+      required: true,
+      icon: Calendar
+    },
+    {
+      id: 'newMessages',
+      title: 'New Messages',
+      description: 'Receive alerts for new messages from clients',
+      required: false,
+      icon: Bell
+    },
+    {
+      id: 'paymentReceived',
+      title: 'Payment Received',
+      description: 'Notifications when you receive payments',
+      required: false,
+      icon: DollarSign
+    },
+    {
+      id: 'systemUpdates',
+      title: 'System Updates',
+      description: 'Important platform updates and announcements',
+      required: false,
+      icon: Bell
+    },
+    {
+      id: 'disputeAlerts',
+      title: 'Dispute Alerts',
+      description: 'Get notified about dispute-related activities',
+      required: false,
+      icon: Shield
+    }
+  ];
+
+  if (loading) {
+    return (
+      <div>
+        <div className="p-6 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-slate-900">Notifications</h2>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors md:hidden">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-12 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="p-6 border-b border-slate-200 flex items-center justify-between">
@@ -1637,14 +1810,174 @@ const NotificationSettings: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           <X className="w-5 h-5" />
         </button>
       </div>
-      <div className="p-6">
-        <p className="text-slate-600 mb-4">
-          Manage your notification preferences
-        </p>
-        <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-          <p className="text-sm text-orange-800">
-            Notification settings functionality will be implemented here.
+
+      <div className="p-6 space-y-6">
+        {success && (
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-600 text-sm flex items-center">
+            <Check className="w-4 h-4 mr-2" />
+            {success}
+          </div>
+        )}
+
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <h3 className="text-sm font-medium text-blue-900 mb-2 flex items-center">
+            <Bell className="w-4 h-4 mr-2" />
+            About Notification Settings
+          </h3>
+          <p className="text-sm text-blue-800">
+            Choose which notifications you want to receive. Booking request notifications are required
+            and cannot be disabled to ensure you never miss a potential job.
           </p>
+        </div>
+
+        <div className="border-t border-slate-200 pt-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Notification Preferences</h3>
+
+          <div className="space-y-3">
+            {notificationTypes.map((notification) => {
+              const Icon = notification.icon;
+              const isEnabled = notification.required || formData[notification.id as keyof typeof formData];
+
+              return (
+                <div
+                  key={notification.id}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    isEnabled
+                      ? 'border-blue-200 bg-blue-50'
+                      : 'border-slate-200 bg-slate-50'
+                  } ${notification.required ? 'opacity-90' : ''}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-start flex-1">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center mr-3 ${
+                        isEnabled ? 'bg-blue-600' : 'bg-slate-400'
+                      }`}>
+                        <Icon className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center">
+                          <h4 className="font-medium text-slate-900">
+                            {notification.title}
+                          </h4>
+                          {notification.required && (
+                            <Badge variant="warning" size="sm" className="ml-2">
+                              Required
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-600 mt-1">
+                          {notification.description}
+                        </p>
+                        {notification.required && (
+                          <p className="text-xs text-slate-500 mt-1">
+                            This notification cannot be disabled
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (!notification.required) {
+                          setFormData({
+                            ...formData,
+                            [notification.id]: !formData[notification.id as keyof typeof formData]
+                          });
+                        }
+                      }}
+                      disabled={notification.required}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ml-4 ${
+                        notification.required
+                          ? 'bg-slate-400 cursor-not-allowed'
+                          : isEnabled
+                          ? 'bg-blue-600 cursor-pointer'
+                          : 'bg-slate-300 cursor-pointer'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          isEnabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200 pt-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Notification Delivery</h3>
+
+          <div className="space-y-3">
+            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <div className="flex items-start">
+                <Bell className="w-5 h-5 text-slate-500 mt-0.5 mr-3 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="font-medium text-slate-900 mb-1">Push Notifications</p>
+                  <p className="text-sm text-slate-600">
+                    Notifications will be sent to your device when you're logged in.
+                  </p>
+                  <div className="mt-2">
+                    <Badge variant="info" size="sm">Coming Soon</Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <div className="flex items-start">
+                <Bell className="w-5 h-5 text-slate-500 mt-0.5 mr-3 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="font-medium text-slate-900 mb-1">Email Notifications</p>
+                  <p className="text-sm text-slate-600">
+                    Important notifications will also be sent to {user?.email}
+                  </p>
+                  <div className="mt-2">
+                    <Badge variant="info" size="sm">Coming Soon</Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <div className="flex items-start">
+                <Bell className="w-5 h-5 text-slate-500 mt-0.5 mr-3 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="font-medium text-slate-900 mb-1">SMS Notifications</p>
+                  <p className="text-sm text-slate-600">
+                    Receive critical alerts via SMS for urgent matters
+                  </p>
+                  <div className="mt-2">
+                    <Badge variant="info" size="sm">Coming Soon</Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex space-x-3 pt-4 border-t border-slate-200">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            loading={saving}
+            className="flex-1"
+          >
+            Save Preferences
+          </Button>
         </div>
       </div>
     </div>
