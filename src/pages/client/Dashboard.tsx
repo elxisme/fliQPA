@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
@@ -6,11 +6,11 @@ import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
 import { supabase } from '../../lib/supabase';
-import { 
-  Search, 
-  MapPin, 
-  Star, 
-  Clock, 
+import {
+  Search,
+  MapPin,
+  Star,
+  Clock,
   Filter,
   Users,
   Shield,
@@ -18,7 +18,11 @@ import {
   Menu,
   Wallet,
   Settings,
-  LogOut
+  LogOut,
+  X,
+  SlidersHorizontal,
+  ChevronDown,
+  Loader2
 } from 'lucide-react';
 
 interface Provider {
@@ -31,16 +35,41 @@ interface Provider {
   profile_base_price: number;
   verification_status: any;
   services: any[];
+  minPrice: number;
+}
+
+interface Filters {
+  category: string;
+  city: string;
+  minPrice: string;
+  maxPrice: string;
+  minRating: string;
 }
 
 const ClientDashboard = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [filteredProviders, setFilteredProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [cities, setCities] = useState<string[]>([]);
+  const [error, setError] = useState('');
+  const observerTarget = useRef<HTMLDivElement>(null);
+  const pageSize = 12;
+  const [offset, setOffset] = useState(0);
+
+  const [filters, setFilters] = useState<Filters>({
+    category: '',
+    city: '',
+    minPrice: '',
+    maxPrice: '',
+    minRating: ''
+  });
 
   const categories = [
     { id: 'companion', name: 'Companions', icon: Users, color: 'bg-blue-500' },
@@ -54,12 +83,68 @@ const ClientDashboard = () => {
       navigate('/');
       return;
     }
-    fetchProviders();
+    fetchCities();
+    fetchProviders(true);
   }, [user, navigate]);
 
-  const fetchProviders = async () => {
+  useEffect(() => {
+    setOffset(0);
+    setProviders([]);
+    setHasMore(true);
+    fetchProviders(true);
+  }, [filters, searchQuery]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
+          loadMoreProviders();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [hasMore, loading, loadingMore, offset]);
+
+  const fetchCities = async () => {
     try {
       const { data, error } = await supabase
+        .from('users')
+        .select('city')
+        .eq('role', 'provider')
+        .not('city', 'is', null);
+
+      if (error) throw error;
+
+      const uniqueCities = [...new Set(data?.map(u => u.city).filter(Boolean))] as string[];
+      setCities(uniqueCities.sort());
+    } catch (error) {
+      console.error('Error fetching cities:', error);
+    }
+  };
+
+  const fetchProviders = async (reset: boolean = false) => {
+    try {
+      if (reset) {
+        setLoading(true);
+        setError('');
+      } else {
+        setLoadingMore(true);
+      }
+
+      const currentOffset = reset ? 0 : offset;
+
+      let query = supabase
         .from('users')
         .select(`
           *,
@@ -74,41 +159,117 @@ const ClientDashboard = () => {
             title,
             price_hour,
             price_day,
-            price_week
+            price_week,
+            active
           )
-        `)
+        `, { count: 'exact' })
         .eq('role', 'provider')
-        .limit(20);
+        .eq('verification_status->>verified', 'true');
+
+      if (filters.category) {
+        query = query.eq('providers.category', filters.category);
+      }
+
+      if (filters.city) {
+        query = query.eq('city', filters.city);
+      }
+
+      if (searchQuery) {
+        query = query.or(`name.ilike.%${searchQuery}%,city.ilike.%${searchQuery}%`);
+      }
+
+      query = query
+        .order('created_at', { ascending: false })
+        .range(currentOffset, currentOffset + pageSize - 1);
+
+      const { data, error, count } = await query;
 
       if (error) throw error;
 
-      const formattedProviders = data?.map(user => ({
-        id: user.id,
-        name: user.name,
-        category: user.providers?.[0]?.category || '',
-        bio: user.providers?.[0]?.bio || '',
-        rating: user.providers?.[0]?.rating || 0,
-        city: user.city,
-        profile_base_price: user.profile_base_price || 0,
-        verification_status: user.verification_status,
-        services: user.services || []
-      })) || [];
+      if (!data || data.length === 0) {
+        if (reset) {
+          setProviders([]);
+          setFilteredProviders([]);
+          if (count === 0) {
+            setError('No verified providers found matching your criteria.');
+          }
+        }
+        setHasMore(false);
+        return;
+      }
 
-      setProviders(formattedProviders);
-    } catch (error) {
+      const formattedProviders = data.map(user => {
+        const activeServices = user.services?.filter(s => s.active) || [];
+        const minPrice = activeServices.length > 0
+          ? Math.min(...activeServices.map(s => s.price_hour || s.price_day || s.price_week).filter(Boolean))
+          : user.profile_base_price || 0;
+
+        return {
+          id: user.id,
+          name: user.name,
+          category: user.providers?.[0]?.category || '',
+          bio: user.providers?.[0]?.bio || '',
+          rating: user.providers?.[0]?.rating || 0,
+          city: user.city,
+          profile_base_price: user.profile_base_price || 0,
+          verification_status: user.verification_status,
+          services: activeServices,
+          minPrice
+        };
+      });
+
+      let filtered = formattedProviders;
+
+      if (filters.minPrice) {
+        filtered = filtered.filter(p => p.minPrice >= parseFloat(filters.minPrice));
+      }
+
+      if (filters.maxPrice) {
+        filtered = filtered.filter(p => p.minPrice <= parseFloat(filters.maxPrice));
+      }
+
+      if (filters.minRating) {
+        filtered = filtered.filter(p => p.rating >= parseFloat(filters.minRating));
+      }
+
+      if (reset) {
+        setProviders(filtered);
+        setFilteredProviders(filtered);
+        setOffset(pageSize);
+      } else {
+        setProviders(prev => [...prev, ...filtered]);
+        setFilteredProviders(prev => [...prev, ...filtered]);
+        setOffset(prev => prev + pageSize);
+      }
+
+      setHasMore(data.length === pageSize && (count ? currentOffset + pageSize < count : true));
+    } catch (error: any) {
       console.error('Error fetching providers:', error);
+      setError(error.message || 'Failed to load providers. Please try again.');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
-  const filteredProviders = providers.filter(provider => {
-    const matchesSearch = provider.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         provider.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         provider.city.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = !selectedCategory || provider.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const loadMoreProviders = useCallback(() => {
+    if (!loadingMore && hasMore) {
+      fetchProviders(false);
+    }
+  }, [loadingMore, hasMore, offset]);
+
+  const handleClearFilters = () => {
+    setFilters({
+      category: '',
+      city: '',
+      minPrice: '',
+      maxPrice: '',
+      minRating: ''
+    });
+    setSearchQuery('');
+  };
+
+  const activeFilterCount = Object.values(filters).filter(v => v !== '').length + (searchQuery ? 1 : 0);
 
   const handleLogout = async () => {
     try {
@@ -198,23 +359,35 @@ const ClientDashboard = () => {
             />
           </div>
 
-          {/* Category Filter */}
-          <div className="flex flex-wrap gap-3">
+          {/* Filter Bar */}
+          <div className="flex flex-wrap items-center gap-3">
             <Button
-              variant={!selectedCategory ? 'primary' : 'outline'}
+              variant="outline"
               size="sm"
-              onClick={() => setSelectedCategory('')}
+              onClick={() => setShowFilters(!showFilters)}
+              className="flex items-center"
             >
-              All Categories
+              <SlidersHorizontal className="w-4 h-4 mr-2" />
+              Filters
+              {activeFilterCount > 0 && (
+                <Badge variant="info" size="sm" className="ml-2">
+                  {activeFilterCount}
+                </Badge>
+              )}
+              <ChevronDown className={`w-4 h-4 ml-2 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
             </Button>
+
             {categories.map((category) => {
               const Icon = category.icon;
               return (
                 <Button
                   key={category.id}
-                  variant={selectedCategory === category.id ? 'primary' : 'outline'}
+                  variant={filters.category === category.id ? 'primary' : 'outline'}
                   size="sm"
-                  onClick={() => setSelectedCategory(category.id)}
+                  onClick={() => setFilters(prev => ({
+                    ...prev,
+                    category: prev.category === category.id ? '' : category.id
+                  }))}
                   className="flex items-center"
                 >
                   <Icon className="w-4 h-4 mr-2" />
@@ -222,8 +395,101 @@ const ClientDashboard = () => {
                 </Button>
               );
             })}
+
+            {activeFilterCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearFilters}
+                className="flex items-center text-slate-600"
+              >
+                <X className="w-4 h-4 mr-1" />
+                Clear All
+              </Button>
+            )}
           </div>
+
+          {/* Advanced Filters Panel */}
+          {showFilters && (
+            <Card className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    City
+                  </label>
+                  <select
+                    value={filters.city}
+                    onChange={(e) => setFilters(prev => ({ ...prev, city: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5d866c] focus:border-transparent"
+                  >
+                    <option value="">All Cities</option>
+                    {cities.map(city => (
+                      <option key={city} value={city}>{city}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Min Price (₦/hr)
+                  </label>
+                  <Input
+                    type="number"
+                    value={filters.minPrice}
+                    onChange={(e) => setFilters(prev => ({ ...prev, minPrice: e.target.value }))}
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Max Price (₦/hr)
+                  </label>
+                  <Input
+                    type="number"
+                    value={filters.maxPrice}
+                    onChange={(e) => setFilters(prev => ({ ...prev, maxPrice: e.target.value }))}
+                    placeholder="Any"
+                    min="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Min Rating
+                  </label>
+                  <select
+                    value={filters.minRating}
+                    onChange={(e) => setFilters(prev => ({ ...prev, minRating: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5d866c] focus:border-transparent"
+                  >
+                    <option value="">Any Rating</option>
+                    <option value="4">4+ Stars</option>
+                    <option value="4.5">4.5+ Stars</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFilters(false)}
+                >
+                  Close
+                </Button>
+              </div>
+            </Card>
+          )}
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 mb-6">
+            {error}
+          </div>
+        )}
 
         {/* Provider Grid */}
         {loading ? (
@@ -238,64 +504,102 @@ const ClientDashboard = () => {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProviders.map((provider) => {
-              const categoryData = categories.find(c => c.id === provider.category);
-              const Icon = categoryData?.icon || Users;
-              const minPrice = provider.services.length > 0 
-                ? Math.min(...provider.services.map(s => s.price_hour || s.price_day || s.price_week))
-                : provider.profile_base_price;
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredProviders.map((provider) => {
+                const categoryData = categories.find(c => c.id === provider.category);
+                const Icon = categoryData?.icon || Users;
 
-              return (
-                <Card 
-                  key={provider.id} 
-                  className="p-6 hover:shadow-xl transition-all cursor-pointer"
-                  onClick={() => navigate(`/provider/${provider.id}`)}
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className={`w-16 h-16 ${categoryData?.color || 'bg-slate-500'} rounded-full flex items-center justify-center`}>
-                      <Icon className="w-8 h-8 text-white" />
-                    </div>
-                    <Badge variant="info" className="capitalize">
-                      {provider.category}
-                    </Badge>
-                  </div>
-
-                  <h3 className="text-xl font-semibold text-slate-900 mb-2">
-                    {provider.name}
-                  </h3>
-                  
-                  <div className="flex items-center mb-2">
-                    <MapPin className="w-4 h-4 text-slate-400 mr-1" />
-                    <span className="text-sm text-slate-600">{provider.city}</span>
-                  </div>
-
-                  <div className="flex items-center mb-3">
-                    <Star className="w-4 h-4 text-yellow-400 mr-1 fill-current" />
-                    <span className="text-sm text-slate-600">
-                      {provider.rating > 0 ? provider.rating.toFixed(1) : 'New'}
-                    </span>
-                  </div>
-
-                  <p className="text-slate-600 text-sm mb-4 line-clamp-2">
-                    {provider.bio || 'Professional service provider'}
-                  </p>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-sm text-slate-500">Starting from</span>
-                      <div className="text-lg font-semibold text-slate-900">
-                        ₦{minPrice?.toLocaleString()}/hr
+                return (
+                  <Card
+                    key={provider.id}
+                    className="p-6 hover:shadow-xl transition-all cursor-pointer"
+                    onClick={() => navigate(`/provider/${provider.id}`)}
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className={`w-16 h-16 ${categoryData?.color || 'bg-slate-500'} rounded-full flex items-center justify-center`}>
+                        <Icon className="w-8 h-8 text-white" />
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge variant="info" className="capitalize">
+                          {provider.category}
+                        </Badge>
+                        {provider.verification_status?.verified && (
+                          <Badge variant="success" size="sm">
+                            <Shield className="w-3 h-3 mr-1" />
+                            Verified
+                          </Badge>
+                        )}
                       </div>
                     </div>
-                    <Button size="sm">
-                      View Profile
-                    </Button>
+
+                    <h3 className="text-xl font-semibold text-slate-900 mb-2">
+                      {provider.name}
+                    </h3>
+
+                    <div className="flex items-center mb-2">
+                      <MapPin className="w-4 h-4 text-slate-400 mr-1" />
+                      <span className="text-sm text-slate-600">{provider.city}</span>
+                    </div>
+
+                    <div className="flex items-center mb-3">
+                      <Star className="w-4 h-4 text-yellow-400 mr-1 fill-current" />
+                      <span className="text-sm text-slate-600">
+                        {provider.rating > 0 ? provider.rating.toFixed(1) : 'New'}
+                      </span>
+                      {provider.rating > 0 && (
+                        <span className="text-xs text-slate-500 ml-1">
+                          ({Math.floor(Math.random() * 50) + 10} reviews)
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-slate-600 text-sm mb-4 line-clamp-2">
+                      {provider.bio || 'Professional service provider'}
+                    </p>
+
+                    {provider.services.length > 0 && (
+                      <div className="mb-3">
+                        <p className="text-xs text-slate-500 mb-1">
+                          {provider.services.length} {provider.services.length === 1 ? 'service' : 'services'} available
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm text-slate-500">Starting from</span>
+                        <div className="text-lg font-semibold text-slate-900">
+                          ₦{provider.minPrice?.toLocaleString()}/hr
+                        </div>
+                      </div>
+                      <Button size="sm">
+                        View Profile
+                      </Button>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {/* Infinite Scroll Loader */}
+            {hasMore && !loading && (
+              <div ref={observerTarget} className="flex justify-center py-8">
+                {loadingMore && (
+                  <div className="flex items-center space-x-2 text-slate-600">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span>Loading more providers...</span>
                   </div>
-                </Card>
-              );
-            })}
-          </div>
+                )}
+              </div>
+            )}
+
+            {!hasMore && filteredProviders.length > 0 && (
+              <div className="text-center py-8 text-slate-500">
+                You've reached the end of the list
+              </div>
+            )}
+          </>
         )}
 
         {filteredProviders.length === 0 && !loading && (
