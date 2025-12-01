@@ -23,7 +23,13 @@ import {
   Check,
   DollarSign,
   Clock,
-  LogOut
+  LogOut,
+  MessageSquare,
+  FileText,
+  AlertCircle,
+  ExternalLink,
+  Mail,
+  Send
 } from 'lucide-react';
 import { AvatarUpload } from '../../components/provider/AvatarUpload';
 import { Input } from '../../components/ui/Input';
@@ -3049,6 +3055,73 @@ const AccountSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 };
 
 const SupportSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const [showContactForm, setShowContactForm] = useState(false);
+  const [showReportForm, setShowReportForm] = useState(false);
+  const [contactForm, setContactForm] = useState({ subject: '', message: '' });
+  const [reportForm, setReportForm] = useState({ issueType: '', description: '' });
+  const [loading, setLoading] = useState(false);
+
+  const faqs = [
+    {
+      question: 'How do I update my service pricing?',
+      answer: 'Go to your Services page in settings and click on any service to edit its details and pricing. Changes take effect immediately.'
+    },
+    {
+      question: 'How can I pause my account?',
+      answer: 'Visit the Account Management section in settings. You can temporarily pause your account, which will hide your profile from clients.'
+    },
+    {
+      question: 'How do I set my working hours?',
+      answer: 'Navigate to Availability & Schedule in settings to set your preferred working hours and days of operation.'
+    },
+    {
+      question: 'What payment methods do you accept?',
+      answer: 'We accept bank transfers to your verified bank account. Set up your bank details in the Bank & Payment Settings section.'
+    },
+    {
+      question: 'How long does verification take?',
+      answer: 'Document verification typically takes 24-48 hours. You can upload your documents in the Verification & Compliance section.'
+    },
+    {
+      question: 'Can I offer services in multiple locations?',
+      answer: 'Yes! Set your service radius and locations in the Location Settings. You can serve multiple areas simultaneously.'
+    }
+  ];
+
+  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+
+  const handleContactSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      alert('Thank you! Your message has been sent to our support team. We typically respond within 24 hours.');
+      setContactForm({ subject: '', message: '' });
+      setShowContactForm(false);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Failed to send message. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      alert('Thank you for reporting the issue. Our team will investigate and get back to you shortly.');
+      setReportForm({ issueType: '', description: '' });
+      setShowReportForm(false);
+    } catch (error) {
+      console.error('Error reporting problem:', error);
+      alert('Failed to submit report. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div>
       <div className="p-6 border-b border-slate-200 flex items-center justify-between">
@@ -3057,15 +3130,251 @@ const SupportSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <X className="w-5 h-5" />
         </button>
       </div>
-      <div className="p-6">
-        <p className="text-slate-600 mb-4">
-          Get help, view FAQs, and contact support
+      <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+        <p className="text-slate-600">
+          Get help, view FAQs, and contact our support team
         </p>
-        <div className="bg-teal-50 p-4 rounded-lg border border-teal-200">
-          <p className="text-sm text-teal-800">
-            Support settings functionality will be implemented here.
-          </p>
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card className="p-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => setShowContactForm(true)}>
+            <div className="flex items-start space-x-3">
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Mail className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900">Contact Support</h3>
+                <p className="text-sm text-slate-600">Get help from our support team</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => setShowReportForm(true)}>
+            <div className="flex items-start space-x-3">
+              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-5 h-5 text-orange-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900">Report a Problem</h3>
+                <p className="text-sm text-slate-600">Report technical issues</p>
+              </div>
+            </div>
+          </Card>
         </div>
+
+        {/* FAQs */}
+        <div className="space-y-3">
+          <h3 className="text-lg font-semibold text-slate-900">Frequently Asked Questions</h3>
+          <div className="space-y-2">
+            {faqs.map((faq, index) => (
+              <Card
+                key={index}
+                className="p-4 cursor-pointer hover:shadow-sm transition-all"
+                onClick={() => setExpandedFaq(expandedFaq === index ? null : index)}
+              >
+                <div className="flex items-start justify-between space-x-3">
+                  <div className="flex-1 text-left">
+                    <h4 className="font-medium text-slate-900">{faq.question}</h4>
+                    {expandedFaq === index && (
+                      <p className="text-sm text-slate-600 mt-2">{faq.answer}</p>
+                    )}
+                  </div>
+                  <ChevronRight className={`w-5 h-5 text-slate-400 flex-shrink-0 transition-transform ${
+                    expandedFaq === index ? 'rotate-90' : ''
+                  }`} />
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+
+        {/* Legal & Policies */}
+        <div className="space-y-3">
+          <h3 className="text-lg font-semibold text-slate-900">Legal & Policies</h3>
+          <div className="space-y-2">
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                window.open('https://example.com/guidelines', '_blank');
+              }}
+              className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 group"
+            >
+              <div className="flex items-center space-x-3">
+                <FileText className="w-5 h-5 text-slate-600 group-hover:text-slate-700" />
+                <span className="font-medium text-slate-900">Community Guidelines</span>
+              </div>
+              <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+            </a>
+
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                window.open('https://example.com/terms', '_blank');
+              }}
+              className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 group"
+            >
+              <div className="flex items-center space-x-3">
+                <FileText className="w-5 h-5 text-slate-600 group-hover:text-slate-700" />
+                <span className="font-medium text-slate-900">Terms & Conditions</span>
+              </div>
+              <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+            </a>
+
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                window.open('https://example.com/privacy', '_blank');
+              }}
+              className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 group"
+            >
+              <div className="flex items-center space-x-3">
+                <FileText className="w-5 h-5 text-slate-600 group-hover:text-slate-700" />
+                <span className="font-medium text-slate-900">Privacy Policy</span>
+              </div>
+              <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+            </a>
+          </div>
+        </div>
+
+        {/* Contact Form Modal */}
+        {showContactForm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className="max-w-md w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold text-slate-900">Contact Support</h3>
+                <button
+                  onClick={() => setShowContactForm(false)}
+                  className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleContactSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Subject
+                  </label>
+                  <Input
+                    value={contactForm.subject}
+                    onChange={(e) => setContactForm({ ...contactForm, subject: e.target.value })}
+                    placeholder="What is this about?"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Message
+                  </label>
+                  <textarea
+                    value={contactForm.message}
+                    onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })}
+                    placeholder="Describe your issue or question..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    rows={5}
+                    required
+                  />
+                </div>
+
+                <div className="flex space-x-3 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowContactForm(false)}
+                    className="flex-1"
+                    disabled={loading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    type="submit"
+                    loading={loading}
+                    className="flex-1"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Send
+                  </Button>
+                </div>
+              </form>
+            </Card>
+          </div>
+        )}
+
+        {/* Report Problem Modal */}
+        {showReportForm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className="max-w-md w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold text-slate-900">Report a Problem</h3>
+                <button
+                  onClick={() => setShowReportForm(false)}
+                  className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleReportSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Issue Type
+                  </label>
+                  <select
+                    value={reportForm.issueType}
+                    onChange={(e) => setReportForm({ ...reportForm, issueType: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="">Select an issue type</option>
+                    <option value="bug">Bug Report</option>
+                    <option value="payment">Payment Issue</option>
+                    <option value="booking">Booking Problem</option>
+                    <option value="performance">Performance Issue</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={reportForm.description}
+                    onChange={(e) => setReportForm({ ...reportForm, description: e.target.value })}
+                    placeholder="Please describe the issue in detail..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    rows={5}
+                    required
+                  />
+                </div>
+
+                <div className="flex space-x-3 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowReportForm(false)}
+                    className="flex-1"
+                    disabled={loading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    type="submit"
+                    loading={loading}
+                    className="flex-1"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Submit
+                  </Button>
+                </div>
+              </form>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );
