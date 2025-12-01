@@ -1620,23 +1620,398 @@ const PaymentSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 };
 
 const VerificationSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+  const [verificationData, setVerificationData] = useState({
+    status: 'NOT_SUBMITTED' as 'VERIFIED' | 'PENDING' | 'NOT_SUBMITTED',
+    govIdUrl: null as string | null,
+    selfieUrl: null as string | null,
+    addressVerificationUrl: null as string | null,
+    submittedAt: null as string | null,
+    verifiedAt: null as string | null
+  });
+
+  useEffect(() => {
+    fetchVerificationData();
+  }, [user]);
+
+  const fetchVerificationData = async () => {
+    if (!user?.id) return;
+
+    setLoading(true);
+    try {
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('verification_status')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (userError) throw userError;
+
+      if (userData?.verification_status) {
+        const vs = userData.verification_status;
+        setVerificationData({
+          status: vs.verified ? 'VERIFIED' : (vs.documents?.length > 0 ? 'PENDING' : 'NOT_SUBMITTED'),
+          govIdUrl: vs.gov_id_url || null,
+          selfieUrl: vs.selfie_url || null,
+          addressVerificationUrl: vs.address_verification_url || null,
+          submittedAt: vs.submitted_at || null,
+          verifiedAt: vs.verified_at || null
+        });
+      }
+    } catch (err: any) {
+      console.error('Error fetching verification data:', err);
+      setError(err.message || 'Failed to load verification data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const uploadDocument = async (file: File, type: 'gov_id' | 'selfie' | 'address_verification'): Promise<string | null> => {
+    if (!user?.id) return null;
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/${type}_${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('verification_documents')
+        .upload(fileName, file, {
+          contentType: file.type,
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from('verification_documents')
+        .getPublicUrl(fileName);
+
+      return publicUrlData.publicUrl;
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      return null;
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'gov_id' | 'selfie' | 'address_verification') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File size must be less than 10MB');
+      return;
+    }
+
+    setUploading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const url = await uploadDocument(file, type);
+      if (!url) {
+        throw new Error('Failed to upload document');
+      }
+
+      const { data: currentData, error: fetchError } = await supabase
+        .from('users')
+        .select('verification_status')
+        .eq('id', user?.id)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      const currentStatus = currentData?.verification_status || {};
+      const updatedStatus = {
+        ...currentStatus,
+        [`${type}_url`]: url,
+        submitted_at: currentStatus.submitted_at || new Date().toISOString(),
+        verified: false
+      };
+
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ verification_status: updatedStatus })
+        .eq('id', user?.id);
+
+      if (updateError) throw updateError;
+
+      setSuccess(`${type.replace('_', ' ')} uploaded successfully`);
+      await fetchVerificationData();
+    } catch (err: any) {
+      console.error('Error uploading document:', err);
+      setError(err.message || 'Failed to upload document');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSubmitForVerification = async () => {
+    if (!verificationData.govIdUrl || !verificationData.selfieUrl || !verificationData.addressVerificationUrl) {
+      setError('Please upload all required documents before submitting');
+      return;
+    }
+
+    setUploading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const { data: currentData, error: fetchError } = await supabase
+        .from('users')
+        .select('verification_status')
+        .eq('id', user?.id)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      const updatedStatus = {
+        ...currentData?.verification_status,
+        submitted_at: new Date().toISOString(),
+        verified: false
+      };
+
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ verification_status: updatedStatus })
+        .eq('id', user?.id);
+
+      if (updateError) throw updateError;
+
+      setSuccess('Documents submitted for verification. Admin will review within 24-48 hours.');
+      await fetchVerificationData();
+    } catch (err: any) {
+      console.error('Error submitting for verification:', err);
+      setError(err.message || 'Failed to submit for verification');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const getStatusBadge = () => {
+    switch (verificationData.status) {
+      case 'VERIFIED':
+        return <Badge variant="success" className="flex items-center"><Check className="w-3 h-3 mr-1" /> Verified</Badge>;
+      case 'PENDING':
+        return <Badge variant="warning" className="flex items-center"><Clock className="w-3 h-3 mr-1" /> Pending Review</Badge>;
+      default:
+        return <Badge variant="danger" className="flex items-center"><AlertCircle className="w-3 h-3 mr-1" /> Not Submitted</Badge>;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="p-6 border-b border-slate-200 flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-slate-900">Verification & Compliance</h2>
+        <div className="flex items-center space-x-3">
+          <h2 className="text-xl font-semibold text-slate-900">Verification & Compliance</h2>
+          {getStatusBadge()}
+        </div>
         <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors md:hidden">
           <X className="w-5 h-5" />
         </button>
       </div>
-      <div className="p-6">
-        <p className="text-slate-600 mb-4">
-          Upload verification documents to build trust
-        </p>
-        <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-          <p className="text-sm text-red-800">
-            Verification settings functionality will be implemented here.
-          </p>
+
+      <div className="p-6 space-y-6">
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm flex items-center">
+            <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-600 text-sm flex items-center">
+            <Check className="w-4 h-4 mr-2 flex-shrink-0" />
+            {success}
+          </div>
+        )}
+
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <div className="flex items-start">
+            <Shield className="w-5 h-5 text-blue-600 mr-3 mt-0.5" />
+            <div>
+              <h3 className="font-medium text-blue-900 mb-1">Build Trust with Clients</h3>
+              <p className="text-sm text-blue-800">
+                Upload verification documents to build trust and credibility. Verified providers receive more bookings.
+              </p>
+            </div>
+          </div>
         </div>
+
+        {verificationData.status === 'VERIFIED' && (
+          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+            <div className="flex items-start">
+              <Check className="w-5 h-5 text-green-600 mr-3 mt-0.5" />
+              <div>
+                <h3 className="font-medium text-green-900 mb-1">Verified Provider</h3>
+                <p className="text-sm text-green-800">
+                  Your account was verified on {verificationData.verifiedAt && new Date(verificationData.verifiedAt).toLocaleDateString()}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div className="border border-slate-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="font-medium text-slate-900">Government ID</h3>
+                <p className="text-sm text-slate-600">NIN, International Passport, or Driver's License</p>
+              </div>
+              {verificationData.govIdUrl && (
+                <Check className="w-5 h-5 text-green-600" />
+              )}
+            </div>
+            {verificationData.govIdUrl ? (
+              <div className="flex items-center justify-between bg-green-50 p-3 rounded-lg">
+                <span className="text-sm text-green-700 flex items-center">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Document uploaded
+                </span>
+                <a
+                  href={verificationData.govIdUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-blue-600 hover:text-blue-700 flex items-center"
+                >
+                  View <ExternalLink className="w-3 h-3 ml-1" />
+                </a>
+              </div>
+            ) : (
+              <label className="block">
+                <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors cursor-pointer">
+                  <FileText className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                  <p className="text-sm text-slate-600">Click to upload Gov ID</p>
+                  <p className="text-xs text-slate-500 mt-1">PNG, JPG, PDF (max 10MB)</p>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={(e) => handleFileUpload(e, 'gov_id')}
+                  className="hidden"
+                  disabled={uploading || verificationData.status === 'VERIFIED'}
+                />
+              </label>
+            )}
+          </div>
+
+          <div className="border border-slate-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="font-medium text-slate-900">Selfie Verification</h3>
+                <p className="text-sm text-slate-600">Clear photo of your face for identity verification</p>
+              </div>
+              {verificationData.selfieUrl && (
+                <Check className="w-5 h-5 text-green-600" />
+              )}
+            </div>
+            {verificationData.selfieUrl ? (
+              <div className="flex items-center justify-between bg-green-50 p-3 rounded-lg">
+                <span className="text-sm text-green-700 flex items-center">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Selfie uploaded
+                </span>
+                <a
+                  href={verificationData.selfieUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-blue-600 hover:text-blue-700 flex items-center"
+                >
+                  View <ExternalLink className="w-3 h-3 ml-1" />
+                </a>
+              </div>
+            ) : (
+              <label className="block">
+                <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors cursor-pointer">
+                  <FileText className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                  <p className="text-sm text-slate-600">Click to upload selfie</p>
+                  <p className="text-xs text-slate-500 mt-1">PNG, JPG (max 10MB)</p>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => handleFileUpload(e, 'selfie')}
+                  className="hidden"
+                  disabled={uploading || verificationData.status === 'VERIFIED'}
+                />
+              </label>
+            )}
+          </div>
+
+          <div className="border border-slate-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="font-medium text-slate-900">Address Verification</h3>
+                <p className="text-sm text-slate-600">Utility bill, bank statement, or government letter</p>
+              </div>
+              {verificationData.addressVerificationUrl && (
+                <Check className="w-5 h-5 text-green-600" />
+              )}
+            </div>
+            {verificationData.addressVerificationUrl ? (
+              <div className="flex items-center justify-between bg-green-50 p-3 rounded-lg">
+                <span className="text-sm text-green-700 flex items-center">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Document uploaded
+                </span>
+                <a
+                  href={verificationData.addressVerificationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-blue-600 hover:text-blue-700 flex items-center"
+                >
+                  View <ExternalLink className="w-3 h-3 ml-1" />
+                </a>
+              </div>
+            ) : (
+              <label className="block">
+                <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors cursor-pointer">
+                  <FileText className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                  <p className="text-sm text-slate-600">Click to upload address verification</p>
+                  <p className="text-xs text-slate-500 mt-1">PNG, JPG, PDF (max 10MB)</p>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={(e) => handleFileUpload(e, 'address_verification')}
+                  className="hidden"
+                  disabled={uploading || verificationData.status === 'VERIFIED'}
+                />
+              </label>
+            )}
+          </div>
+        </div>
+
+        {verificationData.status !== 'VERIFIED' && (
+          <div className="pt-4">
+            <Button
+              onClick={handleSubmitForVerification}
+              disabled={uploading || !verificationData.govIdUrl || !verificationData.selfieUrl || !verificationData.addressVerificationUrl || verificationData.status === 'PENDING'}
+              loading={uploading}
+              className="w-full"
+            >
+              <Send className="w-4 h-4 mr-2" />
+              {verificationData.status === 'PENDING' ? 'Submitted for Review' : 'Submit for Verification'}
+            </Button>
+            {verificationData.status === 'PENDING' && (
+              <p className="text-xs text-slate-500 text-center mt-2">
+                Your documents are being reviewed. You'll be notified once verification is complete.
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
