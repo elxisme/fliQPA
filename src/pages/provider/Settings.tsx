@@ -622,6 +622,132 @@ const ProfileSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 };
 
 const ServiceSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+  const [formData, setFormData] = useState({
+    category: '',
+    basePrice: '',
+    minBookingHours: '1',
+    maxDailyBookings: ''
+  });
+
+  useEffect(() => {
+    fetchServiceData();
+  }, [user]);
+
+  const fetchServiceData = async () => {
+    if (!user?.id) return;
+
+    setLoading(true);
+    try {
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('profile_base_price')
+        .eq('id', user.id)
+        .single();
+
+      if (userError) throw userError;
+
+      const { data: providerData, error: providerError } = await supabase
+        .from('providers')
+        .select('category, min_booking_hours, max_daily_bookings')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (providerError && providerError.code !== 'PGRST116') {
+        throw providerError;
+      }
+
+      if (providerData) {
+        setFormData({
+          category: providerData.category || '',
+          basePrice: userData.profile_base_price?.toString() || '',
+          minBookingHours: providerData.min_booking_hours?.toString() || '1',
+          maxDailyBookings: providerData.max_daily_bookings?.toString() || ''
+        });
+      }
+    } catch (err: any) {
+      console.error('Error fetching service data:', err);
+      setError(err.message || 'Failed to load service data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user?.id) return;
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const { error: userError } = await supabase
+        .from('users')
+        .update({
+          profile_base_price: parseFloat(formData.basePrice)
+        })
+        .eq('id', user.id);
+
+      if (userError) throw userError;
+
+      const updateData: any = {
+        min_booking_hours: parseInt(formData.minBookingHours)
+      };
+
+      if (formData.maxDailyBookings) {
+        updateData.max_daily_bookings = parseInt(formData.maxDailyBookings);
+      } else {
+        updateData.max_daily_bookings = null;
+      }
+
+      const { error: providerError } = await supabase
+        .from('providers')
+        .update(updateData)
+        .eq('user_id', user.id);
+
+      if (providerError) throw providerError;
+
+      setSuccess('Service settings updated successfully');
+
+      setTimeout(() => {
+        setSuccess('');
+      }, 3000);
+
+    } catch (err: any) {
+      console.error('Error saving service settings:', err);
+      setError(err.message || 'Failed to update service settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const categoryNames: { [key: string]: string } = {
+    companion: 'Professional Companion',
+    bouncer: 'Security/Bouncer',
+    bodyguard: 'Personal Bodyguard',
+    assistant: 'Personal Assistant'
+  };
+
+  if (loading) {
+    return (
+      <div>
+        <div className="p-6 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-slate-900">Service Information</h2>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors md:hidden">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-12 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="p-6 border-b border-slate-200 flex items-center justify-between">
@@ -630,14 +756,141 @@ const ServiceSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <X className="w-5 h-5" />
         </button>
       </div>
-      <div className="p-6">
-        <p className="text-slate-600 mb-4">
-          Manage your primary category and base pricing
-        </p>
-        <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-          <p className="text-sm text-green-800">
-            Service settings functionality will be implemented here.
+
+      <div className="p-6 space-y-6">
+        {success && (
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-600 text-sm flex items-center">
+            <Check className="w-4 h-4 mr-2" />
+            {success}
+          </div>
+        )}
+
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <h3 className="text-sm font-medium text-blue-900 mb-2 flex items-center">
+            <Shield className="w-4 h-4 mr-2" />
+            About Service Settings
+          </h3>
+          <p className="text-sm text-blue-800">
+            These settings apply to your base service offering. If you have additional specific services,
+            they can have their own pricing and minimum booking requirements.
           </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-3">
+            Primary Category
+          </label>
+          <div className="relative">
+            <div className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg bg-slate-50 text-slate-700 font-medium">
+              {categoryNames[formData.category] || formData.category}
+            </div>
+            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+              <Lock className="w-5 h-5 text-slate-400" />
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 mt-2">
+            Primary category is set during onboarding and cannot be changed. This ensures consistency
+            in your service offering. Contact support if you need to change your primary category.
+          </p>
+        </div>
+
+        <div className="border-t border-slate-200 pt-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Base Pricing</h3>
+
+          <Input
+            label="Base Hourly Rate (₦)"
+            type="number"
+            value={formData.basePrice}
+            onChange={(e) => setFormData({...formData, basePrice: e.target.value})}
+            placeholder="e.g., 5000"
+            min="0"
+            step="100"
+            required
+            helperText="This is your standard rate per hour for your primary service category"
+          />
+
+          <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <div className="flex items-start">
+              <DollarSign className="w-5 h-5 text-slate-500 mt-0.5 mr-2 flex-shrink-0" />
+              <div className="text-sm text-slate-600">
+                <p className="font-medium text-slate-900 mb-1">When is this rate used?</p>
+                <p>
+                  If you don't have specific service packages, clients will book you at this base rate.
+                  This ensures you always have a fallback pricing structure.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200 pt-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Booking Requirements</h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Minimum Booking Hours"
+              type="number"
+              value={formData.minBookingHours}
+              onChange={(e) => setFormData({...formData, minBookingHours: e.target.value})}
+              min="1"
+              max="24"
+              required
+              helperText="Minimum hours clients must book"
+            />
+
+            <Input
+              label="Max Daily Bookings (Optional)"
+              type="number"
+              value={formData.maxDailyBookings}
+              onChange={(e) => setFormData({...formData, maxDailyBookings: e.target.value})}
+              min="1"
+              max="10"
+              placeholder="No limit"
+              helperText="Maximum bookings you accept per day"
+            />
+          </div>
+
+          <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <div className="flex items-start">
+              <Clock className="w-5 h-5 text-slate-500 mt-0.5 mr-2 flex-shrink-0" />
+              <div className="text-sm text-slate-600">
+                <p className="font-medium text-slate-900 mb-1">About Minimum Booking Hours</p>
+                <p className="mb-2">
+                  Setting a minimum helps ensure bookings are worth your time. For example, if you set
+                  2 hours minimum, clients cannot book you for just 1 hour.
+                </p>
+                <p className="font-medium text-slate-900 mb-1 mt-3">About Max Daily Bookings</p>
+                <p>
+                  This prevents overbooking and helps you maintain quality service. Leave empty if you
+                  don't want to set a limit.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex space-x-3 pt-4 border-t border-slate-200">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            loading={saving}
+            disabled={!formData.basePrice || !formData.minBookingHours}
+            className="flex-1"
+          >
+            Save Changes
+          </Button>
         </div>
       </div>
     </div>
