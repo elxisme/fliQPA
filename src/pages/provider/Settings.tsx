@@ -898,6 +898,124 @@ const ServiceSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 };
 
 const AvailabilitySettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+  const [formData, setFormData] = useState({
+    isOnline: true,
+    vacationMode: false,
+    workingDays: [
+      { day: 'monday', enabled: true, start: '09:00', end: '17:00' },
+      { day: 'tuesday', enabled: true, start: '09:00', end: '17:00' },
+      { day: 'wednesday', enabled: true, start: '09:00', end: '17:00' },
+      { day: 'thursday', enabled: true, start: '09:00', end: '17:00' },
+      { day: 'friday', enabled: true, start: '09:00', end: '17:00' },
+      { day: 'saturday', enabled: false, start: '09:00', end: '17:00' },
+      { day: 'sunday', enabled: false, start: '09:00', end: '17:00' }
+    ]
+  });
+
+  useEffect(() => {
+    fetchAvailabilityData();
+  }, [user]);
+
+  const fetchAvailabilityData = async () => {
+    if (!user?.id) return;
+
+    setLoading(true);
+    try {
+      const { data: providerData, error: providerError } = await supabase
+        .from('providers')
+        .select('is_online, vacation_mode, working_days')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (providerError && providerError.code !== 'PGRST116') {
+        throw providerError;
+      }
+
+      if (providerData) {
+        setFormData({
+          isOnline: providerData.is_online ?? true,
+          vacationMode: providerData.vacation_mode ?? false,
+          workingDays: providerData.working_days && Array.isArray(providerData.working_days) && providerData.working_days.length > 0
+            ? providerData.working_days
+            : formData.workingDays
+        });
+      }
+    } catch (err: any) {
+      console.error('Error fetching availability data:', err);
+      setError(err.message || 'Failed to load availability data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user?.id) return;
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const { error: providerError } = await supabase
+        .from('providers')
+        .update({
+          is_online: formData.isOnline,
+          vacation_mode: formData.vacationMode,
+          working_days: formData.workingDays
+        })
+        .eq('user_id', user.id);
+
+      if (providerError) throw providerError;
+
+      setSuccess('Availability settings updated successfully');
+
+      setTimeout(() => {
+        setSuccess('');
+      }, 3000);
+
+    } catch (err: any) {
+      console.error('Error saving availability settings:', err);
+      setError(err.message || 'Failed to update availability settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleDay = (dayIndex: number) => {
+    const newWorkingDays = [...formData.workingDays];
+    newWorkingDays[dayIndex].enabled = !newWorkingDays[dayIndex].enabled;
+    setFormData({ ...formData, workingDays: newWorkingDays });
+  };
+
+  const updateDayTime = (dayIndex: number, field: 'start' | 'end', value: string) => {
+    const newWorkingDays = [...formData.workingDays];
+    newWorkingDays[dayIndex][field] = value;
+    setFormData({ ...formData, workingDays: newWorkingDays });
+  };
+
+  const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  if (loading) {
+    return (
+      <div>
+        <div className="p-6 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-slate-900">Availability & Schedule</h2>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors md:hidden">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-12 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="p-6 border-b border-slate-200 flex items-center justify-between">
@@ -906,14 +1024,164 @@ const AvailabilitySettings: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           <X className="w-5 h-5" />
         </button>
       </div>
-      <div className="p-6">
-        <p className="text-slate-600 mb-4">
-          Set your working hours and availability status
-        </p>
-        <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-          <p className="text-sm text-purple-800">
-            Availability settings functionality will be implemented here.
+
+      <div className="p-6 space-y-6">
+        {success && (
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-600 text-sm flex items-center">
+            <Check className="w-4 h-4 mr-2" />
+            {success}
+          </div>
+        )}
+
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <h3 className="text-sm font-medium text-blue-900 mb-2 flex items-center">
+            <Calendar className="w-4 h-4 mr-2" />
+            About Availability Settings
+          </h3>
+          <p className="text-sm text-blue-800">
+            Control when you're available to receive bookings. If you're offline, you won't appear in client searches.
+            Vacation mode will completely disable all booking requests.
           </p>
+        </div>
+
+        <div className="border-t border-slate-200 pt-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Current Status</h3>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <div className="flex items-center">
+                <div className={`w-3 h-3 rounded-full mr-3 ${formData.isOnline ? 'bg-green-500' : 'bg-slate-400'}`}></div>
+                <div>
+                  <p className="font-medium text-slate-900">
+                    {formData.isOnline ? 'Online' : 'Offline'}
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    {formData.isOnline ? 'Available for bookings' : 'Not accepting new bookings'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setFormData({ ...formData, isOnline: !formData.isOnline })}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  formData.isOnline ? 'bg-green-600' : 'bg-slate-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    formData.isOnline ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <div>
+                <p className="font-medium text-slate-900">Vacation Mode</p>
+                <p className="text-sm text-slate-600">
+                  Completely disable all bookings temporarily
+                </p>
+              </div>
+              <button
+                onClick={() => setFormData({ ...formData, vacationMode: !formData.vacationMode })}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  formData.vacationMode ? 'bg-orange-600' : 'bg-slate-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    formData.vacationMode ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200 pt-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Working Days & Hours</h3>
+          <p className="text-sm text-slate-600 mb-4">
+            Set your preferred working schedule. This helps clients know when you're typically available.
+          </p>
+
+          <div className="space-y-3">
+            {formData.workingDays.map((dayData, index) => (
+              <div
+                key={dayData.day}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  dayData.enabled
+                    ? 'border-blue-200 bg-blue-50'
+                    : 'border-slate-200 bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={dayData.enabled}
+                      onChange={() => toggleDay(index)}
+                      className="w-5 h-5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                    />
+                    <label className="ml-3 font-medium text-slate-900 capitalize">
+                      {dayNames[index]}
+                    </label>
+                  </div>
+                  {dayData.enabled && (
+                    <Badge variant="info" size="sm">Active</Badge>
+                  )}
+                </div>
+
+                {dayData.enabled && (
+                  <div className="grid grid-cols-2 gap-3 ml-8">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Start Time
+                      </label>
+                      <input
+                        type="time"
+                        value={dayData.start}
+                        onChange={(e) => updateDayTime(index, 'start', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        End Time
+                      </label>
+                      <input
+                        type="time"
+                        value={dayData.end}
+                        onChange={(e) => updateDayTime(index, 'end', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex space-x-3 pt-4 border-t border-slate-200">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            loading={saving}
+            className="flex-1"
+          >
+            Save Changes
+          </Button>
         </div>
       </div>
     </div>
@@ -967,6 +1235,208 @@ const VerificationSettings: React.FC<{ onClose: () => void }> = ({ onClose }) =>
 };
 
 const LocationSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+  const [gettingLocation, setGettingLocation] = useState(false);
+  const [formData, setFormData] = useState({
+    gpsTrackingEnabled: false,
+    currentLatitude: null as number | null,
+    currentLongitude: null as number | null,
+    serviceRadiusKm: 5,
+    lastLocationUpdate: null as string | null,
+    providerId: null as string | null
+  });
+
+  useEffect(() => {
+    fetchLocationData();
+  }, [user]);
+
+  const fetchLocationData = async () => {
+    if (!user?.id) return;
+
+    setLoading(true);
+    try {
+      const { data: providerData, error: providerError } = await supabase
+        .from('providers')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (providerError && providerError.code !== 'PGRST116') {
+        throw providerError;
+      }
+
+      if (!providerData) {
+        setError('Provider profile not found');
+        return;
+      }
+
+      const { data: locationData, error: locationError } = await supabase
+        .from('provider_location_settings')
+        .select('*')
+        .eq('provider_id', providerData.id)
+        .maybeSingle();
+
+      if (locationError && locationError.code !== 'PGRST116') {
+        throw locationError;
+      }
+
+      if (locationData) {
+        setFormData({
+          gpsTrackingEnabled: locationData.gps_tracking_enabled ?? false,
+          currentLatitude: locationData.current_latitude ? parseFloat(locationData.current_latitude) : null,
+          currentLongitude: locationData.current_longitude ? parseFloat(locationData.current_longitude) : null,
+          serviceRadiusKm: locationData.service_radius_km ?? 5,
+          lastLocationUpdate: locationData.last_location_update,
+          providerId: providerData.id
+        });
+      } else {
+        setFormData({ ...formData, providerId: providerData.id });
+      }
+    } catch (err: any) {
+      console.error('Error fetching location data:', err);
+      setError(err.message || 'Failed to load location data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser');
+      return;
+    }
+
+    setGettingLocation(true);
+    setError('');
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setFormData({
+          ...formData,
+          currentLatitude: position.coords.latitude,
+          currentLongitude: position.coords.longitude,
+          lastLocationUpdate: new Date().toISOString()
+        });
+        setGettingLocation(false);
+        setSuccess('Location updated successfully');
+        setTimeout(() => setSuccess(''), 3000);
+      },
+      (error) => {
+        setGettingLocation(false);
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setError('Location permission denied. Please enable location access in your browser settings.');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setError('Location information is unavailable.');
+            break;
+          case error.TIMEOUT:
+            setError('Location request timed out.');
+            break;
+          default:
+            setError('An unknown error occurred while getting location.');
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
+  };
+
+  const handleSave = async () => {
+    if (!user?.id || !formData.providerId) return;
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const { data: existingData } = await supabase
+        .from('provider_location_settings')
+        .select('id')
+        .eq('provider_id', formData.providerId)
+        .maybeSingle();
+
+      const locationData = {
+        provider_id: formData.providerId,
+        gps_tracking_enabled: formData.gpsTrackingEnabled,
+        current_latitude: formData.currentLatitude,
+        current_longitude: formData.currentLongitude,
+        service_radius_km: formData.serviceRadiusKm,
+        last_location_update: formData.lastLocationUpdate
+      };
+
+      if (existingData) {
+        const { error: updateError } = await supabase
+          .from('provider_location_settings')
+          .update(locationData)
+          .eq('provider_id', formData.providerId);
+
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from('provider_location_settings')
+          .insert([locationData]);
+
+        if (insertError) throw insertError;
+      }
+
+      setSuccess('Location settings updated successfully');
+
+      setTimeout(() => {
+        setSuccess('');
+      }, 3000);
+
+    } catch (err: any) {
+      console.error('Error saving location settings:', err);
+      setError(err.message || 'Failed to update location settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const formatLocation = (lat: number | null, lon: number | null) => {
+    if (!lat || !lon) return 'Not set';
+    return `${lat.toFixed(6)}°, ${lon.toFixed(6)}°`;
+  };
+
+  const formatLastUpdate = (timestamp: string | null) => {
+    if (!timestamp) return 'Never';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minutes ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays} days ago`;
+  };
+
+  if (loading) {
+    return (
+      <div>
+        <div className="p-6 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-slate-900">Location Settings</h2>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors md:hidden">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-12 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="p-6 border-b border-slate-200 flex items-center justify-between">
@@ -975,14 +1445,189 @@ const LocationSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <X className="w-5 h-5" />
         </button>
       </div>
-      <div className="p-6">
-        <p className="text-slate-600 mb-4">
-          Control GPS tracking and service radius
-        </p>
-        <div className="bg-cyan-50 p-4 rounded-lg border border-cyan-200">
-          <p className="text-sm text-cyan-800">
-            Location settings functionality will be implemented here.
+
+      <div className="p-6 space-y-6">
+        {success && (
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-600 text-sm flex items-center">
+            <Check className="w-4 h-4 mr-2" />
+            {success}
+          </div>
+        )}
+
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <h3 className="text-sm font-medium text-blue-900 mb-2 flex items-center">
+            <MapPin className="w-4 h-4 mr-2" />
+            About Location Settings
+          </h3>
+          <p className="text-sm text-blue-800">
+            Enable GPS tracking to share your real-time location with clients during bookings.
+            Set your service radius to control how far you're willing to travel for jobs.
+            If GPS is disabled, your city location will be used instead.
           </p>
+        </div>
+
+        <div className="border-t border-slate-200 pt-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">GPS Tracking</h3>
+
+          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 mb-4">
+            <div className="flex items-center">
+              <div className={`w-3 h-3 rounded-full mr-3 ${formData.gpsTrackingEnabled ? 'bg-green-500' : 'bg-slate-400'}`}></div>
+              <div>
+                <p className="font-medium text-slate-900">
+                  Live GPS Tracking
+                </p>
+                <p className="text-sm text-slate-600">
+                  {formData.gpsTrackingEnabled ? 'Location sharing enabled' : 'Location sharing disabled'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setFormData({ ...formData, gpsTrackingEnabled: !formData.gpsTrackingEnabled })}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                formData.gpsTrackingEnabled ? 'bg-green-600' : 'bg-slate-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  formData.gpsTrackingEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {formData.gpsTrackingEnabled && (
+            <div className="space-y-4">
+              <div className="p-4 bg-white rounded-lg border border-slate-200">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-slate-700 mb-1">Current Location</p>
+                    <p className="text-lg font-mono text-slate-900">
+                      {formatLocation(formData.currentLatitude, formData.currentLongitude)}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={getCurrentLocation}
+                    loading={gettingLocation}
+                    className="flex items-center"
+                  >
+                    <MapPin className="w-4 h-4 mr-2" />
+                    {gettingLocation ? 'Getting...' : 'Update'}
+                  </Button>
+                </div>
+                {formData.lastLocationUpdate && (
+                  <p className="text-xs text-slate-500">
+                    Last updated: {formatLastUpdate(formData.lastLocationUpdate)}
+                  </p>
+                )}
+              </div>
+
+              <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                <div className="flex items-start">
+                  <Shield className="w-5 h-5 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" />
+                  <div className="text-sm text-yellow-800">
+                    <p className="font-medium mb-1">Privacy Note</p>
+                    <p>
+                      Your location is only shared with clients during active bookings.
+                      Location data is encrypted and never shared publicly.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-slate-200 pt-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Service Radius</h3>
+          <p className="text-sm text-slate-600 mb-4">
+            Set the maximum distance you're willing to travel from your current location for jobs.
+          </p>
+
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-slate-700">
+                  Maximum Service Radius
+                </label>
+                <span className="text-lg font-bold text-blue-600">
+                  {formData.serviceRadiusKm} km
+                </span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="10"
+                step="1"
+                value={formData.serviceRadiusKm}
+                onChange={(e) => setFormData({ ...formData, serviceRadiusKm: parseInt(e.target.value) })}
+                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              />
+              <div className="flex justify-between text-xs text-slate-500 mt-1">
+                <span>1 km</span>
+                <span>5 km</span>
+                <span>10 km (Max)</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              {[3, 5, 10].map((radius) => (
+                <button
+                  key={radius}
+                  onClick={() => setFormData({ ...formData, serviceRadiusKm: radius })}
+                  className={`p-3 rounded-lg border-2 transition-all text-center ${
+                    formData.serviceRadiusKm === radius
+                      ? 'border-blue-500 bg-blue-50 text-blue-900'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="text-lg font-bold">{radius} km</div>
+                  <div className="text-xs">
+                    {radius === 3 && 'Nearby'}
+                    {radius === 5 && 'Moderate'}
+                    {radius === 10 && 'Extended'}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+              <div className="flex items-start">
+                <MapPin className="w-5 h-5 text-slate-500 mt-0.5 mr-2 flex-shrink-0" />
+                <div className="text-sm text-slate-600">
+                  <p className="font-medium text-slate-900 mb-1">How it works</p>
+                  <p>
+                    Clients within your service radius will see you in their search results.
+                    The distance is calculated from your {formData.gpsTrackingEnabled ? 'current GPS location' : 'city location'}.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex space-x-3 pt-4 border-t border-slate-200">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            loading={saving}
+            className="flex-1"
+          >
+            Save Changes
+          </Button>
         </div>
       </div>
     </div>
