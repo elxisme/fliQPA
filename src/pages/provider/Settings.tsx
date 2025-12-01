@@ -2710,6 +2710,123 @@ const PrivacySettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
 
 const AccountSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [hasActiveBookings, setHasActiveBookings] = useState(false);
+  const [accountStatus, setAccountStatus] = useState<'active' | 'paused' | 'deactivated'>('active');
+  const [showPauseConfirm, setShowPauseConfirm] = useState(false);
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+
+  useEffect(() => {
+    checkActiveBookings();
+    fetchAccountStatus();
+  }, []);
+
+  const checkActiveBookings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('provider_id', user?.id)
+        .in('status', ['REQUESTED', 'ACCEPTED', 'IN_SERVICE'])
+        .limit(1);
+
+      if (error) throw error;
+      setHasActiveBookings((data?.length || 0) > 0);
+    } catch (error) {
+      console.error('Error checking active bookings:', error);
+    }
+  };
+
+  const fetchAccountStatus = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('providers')
+        .select('status')
+        .eq('user_id', user?.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data?.status) {
+        setAccountStatus(data.status);
+      }
+    } catch (error) {
+      console.error('Error fetching account status:', error);
+    }
+  };
+
+  const handlePauseAccount = async () => {
+    setLoading(true);
+    try {
+      const newStatus = accountStatus === 'paused' ? 'active' : 'paused';
+
+      const { error } = await supabase
+        .from('providers')
+        .update({ status: newStatus })
+        .eq('user_id', user?.id);
+
+      if (error) throw error;
+
+      setAccountStatus(newStatus);
+      setShowPauseConfirm(false);
+    } catch (error) {
+      console.error('Error updating account status:', error);
+      alert('Failed to update account status. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeactivateAccount = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('providers')
+        .update({ status: 'deactivated' })
+        .eq('user_id', user?.id);
+
+      if (error) throw error;
+
+      setAccountStatus('deactivated');
+      setShowDeactivateConfirm(false);
+
+      alert('Your account has been deactivated. You can reactivate it anytime from settings.');
+    } catch (error) {
+      console.error('Error deactivating account:', error);
+      alert('Failed to deactivate account. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') {
+      alert('Please type DELETE to confirm');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', user?.id);
+
+      if (error) throw error;
+
+      await signOut();
+      navigate('/');
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      alert('Failed to delete account. Please try again or contact support.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div>
       <div className="p-6 border-b border-slate-200 flex items-center justify-between">
@@ -2718,15 +2835,214 @@ const AccountSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <X className="w-5 h-5" />
         </button>
       </div>
-      <div className="p-6">
-        <p className="text-slate-600 mb-4">
-          Pause, deactivate, or delete your account
+      <div className="p-6 space-y-6">
+        <p className="text-slate-600">
+          Manage your account status and settings
         </p>
-        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <p className="text-sm text-gray-800">
-            Account management functionality will be implemented here.
-          </p>
-        </div>
+
+        {/* Current Status */}
+        <Card className="p-4 bg-slate-50 border border-slate-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-1">Current Account Status</p>
+              <Badge variant={
+                accountStatus === 'active' ? 'success' :
+                accountStatus === 'paused' ? 'warning' : 'neutral'
+              } className="capitalize">
+                {accountStatus}
+              </Badge>
+            </div>
+          </div>
+        </Card>
+
+        {/* Pause Account */}
+        <Card className="p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                Pause Account Temporarily
+              </h3>
+              <p className="text-sm text-slate-600">
+                Your profile will be hidden from clients. You won't receive new bookings but can still manage existing ones.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant={accountStatus === 'paused' ? 'primary' : 'outline'}
+            onClick={() => setShowPauseConfirm(true)}
+            disabled={accountStatus === 'deactivated'}
+          >
+            {accountStatus === 'paused' ? 'Unpause Account' : 'Pause Account'}
+          </Button>
+        </Card>
+
+        {/* Deactivate Account */}
+        <Card className="p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                Deactivate Account
+              </h3>
+              <p className="text-sm text-slate-600">
+                Your account will be deactivated. You can reactivate it anytime by logging back in.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => setShowDeactivateConfirm(true)}
+            disabled={accountStatus === 'deactivated'}
+          >
+            Deactivate Account
+          </Button>
+        </Card>
+
+        {/* Delete Account - Danger Zone */}
+        <Card className="p-6 border-2 border-red-200 bg-red-50">
+          <div className="flex items-start mb-4">
+            <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+              <Shield className="w-5 h-5 text-red-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-red-900 mb-2">
+                Danger Zone
+              </h3>
+              <p className="text-sm text-red-700 mb-4">
+                Once you delete your account, there is no going back. All your data, bookings history, and ratings will be permanently removed.
+              </p>
+              {hasActiveBookings && (
+                <div className="mb-4 p-3 bg-red-100 border border-red-300 rounded-lg">
+                  <p className="text-sm text-red-800 font-medium">
+                    You cannot delete your account while you have active bookings. Please complete or cancel all active bookings first.
+                  </p>
+                </div>
+              )}
+              <Button
+                variant="danger"
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={hasActiveBookings}
+              >
+                Delete Account Permanently
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {/* Pause Confirmation Modal */}
+        {showPauseConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className="max-w-md w-full p-6">
+              <h3 className="text-xl font-semibold text-slate-900 mb-4">
+                {accountStatus === 'paused' ? 'Unpause Account' : 'Pause Account'}
+              </h3>
+              <p className="text-slate-600 mb-6">
+                {accountStatus === 'paused'
+                  ? 'Your profile will be visible to clients again and you will start receiving new booking requests.'
+                  : 'Your profile will be hidden from clients and you will not receive new booking requests. You can unpause at any time.'}
+              </p>
+              <div className="flex space-x-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPauseConfirm(false)}
+                  className="flex-1"
+                  disabled={loading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handlePauseAccount}
+                  loading={loading}
+                  className="flex-1"
+                >
+                  {accountStatus === 'paused' ? 'Unpause' : 'Pause'}
+                </Button>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Deactivate Confirmation Modal */}
+        {showDeactivateConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className="max-w-md w-full p-6">
+              <h3 className="text-xl font-semibold text-slate-900 mb-4">
+                Deactivate Account
+              </h3>
+              <p className="text-slate-600 mb-6">
+                Are you sure you want to deactivate your account? You can reactivate it anytime by logging back in.
+              </p>
+              <div className="flex space-x-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDeactivateConfirm(false)}
+                  className="flex-1"
+                  disabled={loading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={handleDeactivateAccount}
+                  loading={loading}
+                  className="flex-1"
+                >
+                  Deactivate
+                </Button>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className="max-w-md w-full p-6">
+              <h3 className="text-xl font-semibold text-red-900 mb-4">
+                Delete Account Permanently
+              </h3>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-red-800 font-medium mb-2">
+                  This action cannot be undone!
+                </p>
+                <p className="text-sm text-red-700">
+                  All your data including profile, services, bookings history, and ratings will be permanently deleted.
+                </p>
+              </div>
+              <p className="text-slate-700 mb-4">
+                Type <strong>DELETE</strong> to confirm:
+              </p>
+              <Input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="Type DELETE"
+                className="mb-6"
+              />
+              <div className="flex space-x-3">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeleteConfirmText('');
+                  }}
+                  className="flex-1"
+                  disabled={loading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={handleDeleteAccount}
+                  loading={loading}
+                  disabled={deleteConfirmText !== 'DELETE'}
+                  className="flex-1"
+                >
+                  Delete Forever
+                </Button>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );
