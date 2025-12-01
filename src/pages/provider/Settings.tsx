@@ -20,7 +20,10 @@ import {
   HelpCircle,
   ChevronRight,
   X,
-  Check
+  Check,
+  DollarSign,
+  Clock,
+  LogOut
 } from 'lucide-react';
 import { AvatarUpload } from '../../components/provider/AvatarUpload';
 import { Input } from '../../components/ui/Input';
@@ -86,16 +89,9 @@ const sections: SettingsSection[] = [
   {
     id: 'privacy',
     title: 'Privacy Settings',
-    description: 'Control your profile visibility',
+    description: 'Profile visibility, security & password',
     icon: Eye,
     color: 'bg-pink-100 text-pink-600'
-  },
-  {
-    id: 'security',
-    title: 'Security & Password',
-    description: 'Change password and security options',
-    icon: Lock,
-    color: 'bg-slate-100 text-slate-600'
   },
   {
     id: 'account',
@@ -164,8 +160,6 @@ const ProviderSettings = () => {
         return <NotificationSettings onClose={handleCloseModal} />;
       case 'privacy':
         return <PrivacySettings onClose={handleCloseModal} />;
-      case 'security':
-        return <SecuritySettings onClose={handleCloseModal} />;
       case 'account':
         return <AccountSettings onClose={handleCloseModal} />;
       case 'support':
@@ -1658,6 +1652,159 @@ const NotificationSettings: React.FC<{ onClose: () => void }> = ({ onClose }) =>
 };
 
 const PrivacySettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [formData, setFormData] = useState({
+    showDistanceToClients: true,
+    showRatings: true,
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+
+  useEffect(() => {
+    fetchPrivacySettings();
+  }, [user]);
+
+  const fetchPrivacySettings = async () => {
+    if (!user?.id) return;
+
+    setLoading(true);
+    try {
+      const { data: providerData, error: providerError } = await supabase
+        .from('providers')
+        .select('show_distance_to_clients, show_ratings')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (providerError && providerError.code !== 'PGRST116') {
+        throw providerError;
+      }
+
+      if (providerData) {
+        setFormData({
+          ...formData,
+          showDistanceToClients: providerData.show_distance_to_clients ?? true,
+          showRatings: providerData.show_ratings ?? true
+        });
+      }
+    } catch (err: any) {
+      console.error('Error fetching privacy settings:', err);
+      setError(err.message || 'Failed to load privacy settings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSavePrivacy = async () => {
+    if (!user?.id) return;
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const { error: providerError } = await supabase
+        .from('providers')
+        .update({
+          show_distance_to_clients: formData.showDistanceToClients,
+          show_ratings: formData.showRatings
+        })
+        .eq('user_id', user.id);
+
+      if (providerError) throw providerError;
+
+      setSuccess('Privacy settings updated successfully');
+
+      setTimeout(() => {
+        setSuccess('');
+      }, 3000);
+
+    } catch (err: any) {
+      console.error('Error saving privacy settings:', err);
+      setError(err.message || 'Failed to update privacy settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!formData.newPassword || !formData.confirmPassword) {
+      setError('Please fill in all password fields');
+      return;
+    }
+
+    if (formData.newPassword !== formData.confirmPassword) {
+      setError('New passwords do not match');
+      return;
+    }
+
+    if (formData.newPassword.length < 6) {
+      setError('New password must be at least 6 characters');
+      return;
+    }
+
+    setChangingPassword(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: formData.newPassword
+      });
+
+      if (updateError) throw updateError;
+
+      setSuccess('Password updated successfully');
+      setFormData({
+        ...formData,
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+
+      setTimeout(() => {
+        setSuccess('');
+      }, 3000);
+
+    } catch (err: any) {
+      console.error('Error changing password:', err);
+      setError(err.message || 'Failed to change password');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigate('/');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div>
+        <div className="p-6 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-slate-900">Privacy Settings</h2>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors md:hidden">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-12 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="p-6 border-b border-slate-200 flex items-center justify-between">
@@ -1666,42 +1813,160 @@ const PrivacySettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <X className="w-5 h-5" />
         </button>
       </div>
-      <div className="p-6">
-        <p className="text-slate-600 mb-4">
-          Control your profile visibility and privacy
-        </p>
-        <div className="bg-pink-50 p-4 rounded-lg border border-pink-200">
-          <p className="text-sm text-pink-800">
-            Privacy settings functionality will be implemented here.
+
+      <div className="p-6 space-y-6">
+        {success && (
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-600 text-sm flex items-center">
+            <Check className="w-4 h-4 mr-2" />
+            {success}
+          </div>
+        )}
+
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <h3 className="text-sm font-medium text-blue-900 mb-2 flex items-center">
+            <Eye className="w-4 h-4 mr-2" />
+            About Privacy Settings
+          </h3>
+          <p className="text-sm text-blue-800">
+            Control how your profile information is displayed to clients and manage your account security.
           </p>
+        </div>
+
+        <div className="border-t border-slate-200 pt-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Profile Visibility</h3>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <div>
+                <p className="font-medium text-slate-900">Show distance to clients</p>
+                <p className="text-sm text-slate-600">
+                  Display your distance from clients in search results
+                </p>
+              </div>
+              <button
+                onClick={() => setFormData({ ...formData, showDistanceToClients: !formData.showDistanceToClients })}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  formData.showDistanceToClients ? 'bg-blue-600' : 'bg-slate-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    formData.showDistanceToClients ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <div>
+                <p className="font-medium text-slate-900">Show ratings</p>
+                <p className="text-sm text-slate-600">
+                  Display your rating and reviews on your profile
+                </p>
+              </div>
+              <button
+                onClick={() => setFormData({ ...formData, showRatings: !formData.showRatings })}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  formData.showRatings ? 'bg-blue-600' : 'bg-slate-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    formData.showRatings ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex justify-end mt-4">
+            <Button
+              onClick={handleSavePrivacy}
+              loading={saving}
+              size="sm"
+            >
+              Save Privacy Settings
+            </Button>
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200 pt-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
+            <Lock className="w-5 h-5 mr-2" />
+            Security & Password
+          </h3>
+
+          <div className="space-y-4">
+            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <h4 className="font-medium text-slate-900 mb-3">Change Password</h4>
+              <div className="space-y-3">
+                <Input
+                  label="New Password"
+                  type="password"
+                  value={formData.newPassword}
+                  onChange={(e) => setFormData({...formData, newPassword: e.target.value})}
+                  placeholder="Enter new password"
+                />
+
+                <Input
+                  label="Confirm New Password"
+                  type="password"
+                  value={formData.confirmPassword}
+                  onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
+                  placeholder="Confirm new password"
+                />
+
+                <Button
+                  onClick={handleChangePassword}
+                  loading={changingPassword}
+                  disabled={!formData.newPassword || !formData.confirmPassword}
+                  size="sm"
+                  className="w-full"
+                >
+                  <Lock className="w-4 h-4 mr-2" />
+                  Update Password
+                </Button>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-slate-900">Two-Factor Authentication (2FA)</p>
+                  <p className="text-sm text-slate-600">Add an extra layer of security to your account</p>
+                </div>
+                <Badge variant="neutral" size="sm">Coming Soon</Badge>
+              </div>
+            </div>
+
+            <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+              <h4 className="font-medium text-red-900 mb-2">Logout</h4>
+              <p className="text-sm text-red-800 mb-3">
+                Sign out of your account on this device
+              </p>
+              <Button
+                onClick={handleLogout}
+                variant="danger"
+                size="sm"
+                className="w-full"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout from Account
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 };
 
-const SecuritySettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  return (
-    <div>
-      <div className="p-6 border-b border-slate-200 flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-slate-900">Security & Password</h2>
-        <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors md:hidden">
-          <X className="w-5 h-5" />
-        </button>
-      </div>
-      <div className="p-6">
-        <p className="text-slate-600 mb-4">
-          Change password and manage security options
-        </p>
-        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-          <p className="text-sm text-slate-800">
-            Security settings functionality will be implemented here.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const AccountSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   return (
