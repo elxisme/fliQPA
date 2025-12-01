@@ -1183,6 +1183,237 @@ const AvailabilitySettings: React.FC<{ onClose: () => void }> = ({ onClose }) =>
 };
 
 const PaymentSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+  const [banks, setBanks] = useState<Array<{ name: string; code: string }>>([]);
+  const [formData, setFormData] = useState({
+    providerId: null as string | null,
+    bankName: '',
+    bankCode: '',
+    accountNumber: '',
+    accountName: '',
+    paystackSubaccountCode: '',
+    bankVerified: false
+  });
+
+  useEffect(() => {
+    fetchBanks();
+    fetchPaymentData();
+  }, [user]);
+
+  const fetchBanks = async () => {
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paystack-banks`;
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch banks');
+      }
+
+      const result = await response.json();
+      if (result.status && result.data) {
+        setBanks(result.data);
+      }
+    } catch (err) {
+      console.error('Error fetching banks:', err);
+    }
+  };
+
+  const fetchPaymentData = async () => {
+    if (!user?.id) return;
+
+    setLoading(true);
+    try {
+      const { data: providerData, error: providerError } = await supabase
+        .from('providers')
+        .select('id, bank_name, account_number, account_name, paystack_subaccount_code, bank_verified')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (providerError && providerError.code !== 'PGRST116') {
+        throw providerError;
+      }
+
+      if (providerData) {
+        const selectedBank = banks.find(b => b.name === providerData.bank_name);
+        setFormData({
+          providerId: providerData.id,
+          bankName: providerData.bank_name || '',
+          bankCode: selectedBank?.code || '',
+          accountNumber: providerData.account_number || '',
+          accountName: providerData.account_name || '',
+          paystackSubaccountCode: providerData.paystack_subaccount_code || '',
+          bankVerified: providerData.bank_verified || false
+        });
+      }
+    } catch (err: any) {
+      console.error('Error fetching payment data:', err);
+      setError(err.message || 'Failed to load payment data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBankChange = (bankName: string) => {
+    const selectedBank = banks.find(b => b.name === bankName);
+    setFormData({
+      ...formData,
+      bankName,
+      bankCode: selectedBank?.code || '',
+      accountName: '',
+      bankVerified: false
+    });
+  };
+
+  const handleVerifyAccount = async () => {
+    if (!formData.accountNumber || !formData.bankCode) {
+      setError('Please enter account number and select a bank');
+      return;
+    }
+
+    setVerifying(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paystack-verify-account`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          account_number: formData.accountNumber,
+          bank_code: formData.bankCode
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.status) {
+        throw new Error(result.message || 'Failed to verify account');
+      }
+
+      setFormData({
+        ...formData,
+        accountName: result.data.account_name,
+        bankVerified: true
+      });
+
+      setSuccess(`Account verified: ${result.data.account_name}`);
+
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (err: any) {
+      console.error('Error verifying account:', err);
+      setError(err.message || 'Failed to verify account. Please check your details.');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user?.id || !formData.providerId) return;
+
+    if (!formData.bankVerified) {
+      setError('Please verify your account before saving');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', user.id)
+        .single();
+
+      const businessName = userData?.name || 'Provider Account';
+
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paystack-create-subaccount`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider_id: formData.providerId,
+          business_name: businessName,
+          settlement_bank: formData.bankCode,
+          account_number: formData.accountNumber,
+          percentage_charge: 20
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.status) {
+        throw new Error(result.message || 'Failed to create/update subaccount');
+      }
+
+      const { error: updateError } = await supabase
+        .from('providers')
+        .update({
+          bank_name: formData.bankName,
+          account_number: formData.accountNumber,
+          account_name: formData.accountName,
+          paystack_subaccount_code: result.data.subaccount_code,
+          bank_verified: true,
+          bank_verified_at: new Date().toISOString()
+        })
+        .eq('id', formData.providerId);
+
+      if (updateError) throw updateError;
+
+      setFormData({
+        ...formData,
+        paystackSubaccountCode: result.data.subaccount_code
+      });
+
+      setSuccess('Payment settings saved successfully! You can now receive payouts.');
+
+      setTimeout(() => {
+        setSuccess('');
+      }, 5000);
+
+    } catch (err: any) {
+      console.error('Error saving payment settings:', err);
+      setError(err.message || 'Failed to save payment settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div>
+        <div className="p-6 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-slate-900">Bank & Payment Settings</h2>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors md:hidden">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-12 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="p-6 border-b border-slate-200 flex items-center justify-between">
@@ -1191,14 +1422,186 @@ const PaymentSettings: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <X className="w-5 h-5" />
         </button>
       </div>
-      <div className="p-6">
-        <p className="text-slate-600 mb-4">
-          Manage your bank account and payment details
-        </p>
-        <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-          <p className="text-sm text-yellow-800">
-            Payment settings functionality will be implemented here.
+
+      <div className="p-6 space-y-6">
+        {success && (
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-600 text-sm flex items-center">
+            <Check className="w-4 h-4 mr-2" />
+            {success}
+          </div>
+        )}
+
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <h3 className="text-sm font-medium text-blue-900 mb-2 flex items-center">
+            <CreditCard className="w-4 h-4 mr-2" />
+            About Payment Settings
+          </h3>
+          <p className="text-sm text-blue-800">
+            Add your bank account details to receive payments from completed bookings.
+            We use Paystack to securely process your payouts. You'll receive 80% of each booking amount.
           </p>
+        </div>
+
+        {formData.paystackSubaccountCode && (
+          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+            <div className="flex items-start">
+              <Check className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium text-green-900 mb-1">Payment Account Active</p>
+                <p className="text-sm text-green-800 mb-2">
+                  Your bank account has been verified and connected to Paystack.
+                  You can now receive payments for completed bookings.
+                </p>
+                <div className="mt-3 p-2 bg-white rounded border border-green-200">
+                  <p className="text-xs text-green-700 mb-1">Paystack Subaccount Code</p>
+                  <p className="text-sm font-mono text-green-900">{formData.paystackSubaccountCode}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="border-t border-slate-200 pt-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Bank Account Details</h3>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Bank Name
+              </label>
+              <select
+                value={formData.bankName}
+                onChange={(e) => handleBankChange(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={!!formData.paystackSubaccountCode}
+              >
+                <option value="">Select your bank</option>
+                {banks.map((bank) => (
+                  <option key={bank.code} value={bank.name}>
+                    {bank.name}
+                  </option>
+                ))}
+              </select>
+              {formData.paystackSubaccountCode && (
+                <p className="text-xs text-slate-500 mt-1">
+                  Bank details are locked once verified. Contact support to update.
+                </p>
+              )}
+            </div>
+
+            <Input
+              label="Account Number"
+              type="text"
+              value={formData.accountNumber}
+              onChange={(e) => {
+                const value = e.target.value.replace(/\D/g, '');
+                setFormData({
+                  ...formData,
+                  accountNumber: value,
+                  accountName: '',
+                  bankVerified: false
+                });
+              }}
+              placeholder="Enter your 10-digit account number"
+              maxLength={10}
+              disabled={!!formData.paystackSubaccountCode}
+              helperText={formData.paystackSubaccountCode ? 'Account number is locked' : 'Enter your NUBAN account number'}
+            />
+
+            {formData.accountName && (
+              <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                <div className="flex items-start">
+                  <Check className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-green-900 mb-1">Account Verified</p>
+                    <p className="text-lg font-semibold text-green-900">{formData.accountName}</p>
+                    <p className="text-xs text-green-700 mt-1">
+                      {formData.bankName} - {formData.accountNumber}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!formData.paystackSubaccountCode && (
+              <Button
+                onClick={handleVerifyAccount}
+                loading={verifying}
+                disabled={!formData.accountNumber || formData.accountNumber.length !== 10 || !formData.bankCode}
+                variant="outline"
+                className="w-full"
+              >
+                <Shield className="w-4 h-4 mr-2" />
+                {verifying ? 'Verifying...' : 'Verify Account'}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {!formData.paystackSubaccountCode && (
+          <div className="border-t border-slate-200 pt-6">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Payout Information</h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="flex items-center mb-2">
+                  <DollarSign className="w-5 h-5 text-slate-500 mr-2" />
+                  <p className="text-sm font-medium text-slate-700">Your Share</p>
+                </div>
+                <p className="text-2xl font-bold text-slate-900">80%</p>
+                <p className="text-xs text-slate-600 mt-1">Of each booking amount</p>
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="flex items-center mb-2">
+                  <DollarSign className="w-5 h-5 text-slate-500 mr-2" />
+                  <p className="text-sm font-medium text-slate-700">Platform Fee</p>
+                </div>
+                <p className="text-2xl font-bold text-slate-900">20%</p>
+                <p className="text-xs text-slate-600 mt-1">Covers platform costs</p>
+              </div>
+            </div>
+
+            <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+              <div className="flex items-start">
+                <Shield className="w-5 h-5 text-slate-500 mt-0.5 mr-2 flex-shrink-0" />
+                <div className="text-sm text-slate-600">
+                  <p className="font-medium text-slate-900 mb-1">Payout Schedule</p>
+                  <p>
+                    Funds are automatically transferred to your account within 24 hours after a booking
+                    is marked as completed. All transactions are secured by Paystack.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex space-x-3 pt-4 border-t border-slate-200">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="flex-1"
+          >
+            {formData.paystackSubaccountCode ? 'Close' : 'Cancel'}
+          </Button>
+          {!formData.paystackSubaccountCode && (
+            <Button
+              onClick={handleSave}
+              loading={saving}
+              disabled={!formData.bankVerified || !formData.accountName}
+              className="flex-1"
+            >
+              <CreditCard className="w-4 h-4 mr-2" />
+              Save & Activate
+            </Button>
+          )}
         </div>
       </div>
     </div>
