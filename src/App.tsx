@@ -9,6 +9,7 @@ import UpdatePassword from './pages/auth/UpdatePassword';
 import ClientDashboard from './pages/client/Dashboard';
 import ProviderDashboard from './pages/provider/Dashboard';
 import AdminDashboard from './pages/admin/Dashboard';
+import AdminSettings from './pages/admin/Settings';
 import ProviderProfile from './pages/client/ProviderProfile';
 import BookingFlow from './pages/client/BookingFlow';
 import ProviderOnboarding from './pages/provider/Onboarding';
@@ -98,6 +99,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/settings"
+        element={
+          <ProtectedRoute>
+            <AdminSettings />
           </ProtectedRoute>
         }
       />

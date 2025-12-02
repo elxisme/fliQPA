@@ -192,7 +192,7 @@ const AdminDashboard = () => {
             </div>
             
             <div className="flex items-center space-x-4">
-              <Button variant="ghost" className="flex items-center">
+              <Button variant="ghost" onClick={() => navigate('/admin/settings')} className="flex items-center">
                 <Settings className="w-4 h-4 mr-2" />
                 Settings
               </Button>
