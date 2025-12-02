@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
+import { Input } from '../../components/ui/Input';
+import { supabase } from '../../lib/supabase';
 import {
   ArrowLeft,
   AlertTriangle,
@@ -15,7 +17,19 @@ import {
   Settings as SettingsIcon,
   MessageSquare,
   ChevronRight,
-  X
+  X,
+  Search,
+  Eye,
+  Edit,
+  Ban,
+  Unlock,
+  Clock,
+  MapPin,
+  Mail,
+  Phone,
+  CheckCircle,
+  XCircle,
+  AlertCircle
 } from 'lucide-react';
 
 interface SettingsSection {
@@ -285,13 +299,226 @@ const VerificationWorkflow: React.FC<SectionProps> = ({ onClose }) => {
   );
 };
 
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  city: string;
+  role: string;
+  status: string;
+  status_reason?: string;
+  status_updated_at?: string;
+  last_login_at?: string;
+  created_at: string;
+  verification_status?: any;
+}
+
+interface ActivityLog {
+  id: string;
+  action: string;
+  details: any;
+  created_at: string;
+  admin: {
+    name: string;
+  };
+}
+
 const UserManagement: React.FC<SectionProps> = ({ onClose }) => {
+  const { user: currentUser } = useAuth();
+  const [users, setUsers] = useState<User[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showUserDetail, setShowUserDetail] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusAction, setStatusAction] = useState<'suspend' | 'ban' | 'activate'>('suspend');
+  const [statusReason, setStatusReason] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  useEffect(() => {
+    filterUsers();
+  }, [users, searchQuery, statusFilter, roleFilter]);
+
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filterUsers = () => {
+    let filtered = [...users];
+
+    if (searchQuery) {
+      filtered = filtered.filter(u =>
+        u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.phone?.includes(searchQuery) ||
+        u.city?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(u => u.status === statusFilter);
+    }
+
+    if (roleFilter !== 'all') {
+      filtered = filtered.filter(u => u.role === roleFilter);
+    }
+
+    setFilteredUsers(filtered);
+  };
+
+  const fetchActivityLogs = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_activity_logs')
+        .select(`
+          *,
+          admin:users!user_activity_logs_admin_id_fkey(name)
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      setActivityLogs(data || []);
+    } catch (error) {
+      console.error('Error fetching activity logs:', error);
+      setActivityLogs([]);
+    }
+  };
+
+  const handleViewUser = (user: User) => {
+    setSelectedUser(user);
+    fetchActivityLogs(user.id);
+    setShowUserDetail(true);
+  };
+
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user);
+    setShowEditModal(true);
+  };
+
+  const handleStatusAction = (user: User, action: 'suspend' | 'ban' | 'activate') => {
+    setSelectedUser(user);
+    setStatusAction(action);
+    setStatusReason('');
+    setShowStatusModal(true);
+  };
+
+  const handleSaveUserEdit = async (updatedData: Partial<User>) => {
+    if (!selectedUser) return;
+
+    setActionLoading(true);
+    try {
+      const { error: updateError } = await supabase
+        .from('users')
+        .update(updatedData)
+        .eq('id', selectedUser.id);
+
+      if (updateError) throw updateError;
+
+      const { error: logError } = await supabase
+        .from('user_activity_logs')
+        .insert({
+          user_id: selectedUser.id,
+          admin_id: currentUser?.id,
+          action: 'user_info_updated',
+          details: { changes: updatedData }
+        });
+
+      if (logError) console.error('Error logging action:', logError);
+
+      await fetchUsers();
+      setShowEditModal(false);
+      setSelectedUser(null);
+    } catch (error) {
+      console.error('Error updating user:', error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleConfirmStatusAction = async () => {
+    if (!selectedUser || !currentUser) return;
+
+    setActionLoading(true);
+    try {
+      const newStatus = statusAction === 'activate' ? 'active' : statusAction === 'suspend' ? 'suspended' : 'banned';
+
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({
+          status: newStatus,
+          status_reason: statusAction !== 'activate' ? statusReason : null,
+          status_updated_at: new Date().toISOString(),
+          status_updated_by: currentUser.id
+        })
+        .eq('id', selectedUser.id);
+
+      if (updateError) throw updateError;
+
+      const { error: logError } = await supabase
+        .from('user_activity_logs')
+        .insert({
+          user_id: selectedUser.id,
+          admin_id: currentUser.id,
+          action: `account_${statusAction}${statusAction !== 'activate' ? 'ed' : 'd'}`,
+          details: { reason: statusReason, previous_status: selectedUser.status }
+        });
+
+      if (logError) console.error('Error logging action:', logError);
+
+      await fetchUsers();
+      setShowStatusModal(false);
+      setSelectedUser(null);
+      setStatusReason('');
+    } catch (error) {
+      console.error('Error updating user status:', error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'active':
+        return <Badge variant="success">Active</Badge>;
+      case 'suspended':
+        return <Badge variant="warning">Suspended</Badge>;
+      case 'banned':
+        return <Badge variant="danger">Banned</Badge>;
+      default:
+        return <Badge variant="neutral">{status}</Badge>;
+    }
+  };
+
   return (
     <div>
       <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">User Management Features</h2>
-          <p className="text-slate-600 mt-1">Manage users, roles, and permissions</p>
+          <h2 className="text-2xl font-bold text-slate-900">User Management</h2>
+          <p className="text-slate-600 mt-1">Manage users, roles, and account status</p>
         </div>
         <button
           onClick={onClose}
@@ -302,26 +529,521 @@ const UserManagement: React.FC<SectionProps> = ({ onClose }) => {
       </div>
 
       <div className="p-6 space-y-6">
-        <Card className="p-6 border-2 border-dashed border-slate-300">
-          <div className="text-center py-8">
-            <Users className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-slate-900 mb-2">
-              User Management Coming Soon
-            </h3>
-            <p className="text-slate-600 mb-4">
-              Advanced user management, role assignment, and account actions
-            </p>
-            <div className="text-sm text-slate-500 space-y-1">
-              <p>• Search and filter users</p>
-              <p>• View detailed user profiles</p>
-              <p>• Suspend or ban accounts</p>
-              <p>• Change user roles</p>
-              <p>• Reset user passwords</p>
-              <p>• Export user data</p>
-              <p>• View user activity logs</p>
+        {/* Search and Filters */}
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+            <Input
+              placeholder="Search by name, email, phone, or city..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="suspended">Suspended</option>
+            <option value="banned">Banned</option>
+          </select>
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Roles</option>
+            <option value="client">Client</option>
+            <option value="provider">Provider</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className="p-4">
+            <div className="text-sm text-slate-600">Total Users</div>
+            <div className="text-2xl font-bold text-slate-900">{users.length}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-sm text-slate-600">Active</div>
+            <div className="text-2xl font-bold text-green-600">
+              {users.filter(u => u.status === 'active').length}
+            </div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-sm text-slate-600">Suspended</div>
+            <div className="text-2xl font-bold text-yellow-600">
+              {users.filter(u => u.status === 'suspended').length}
+            </div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-sm text-slate-600">Banned</div>
+            <div className="text-2xl font-bold text-red-600">
+              {users.filter(u => u.status === 'banned').length}
+            </div>
+          </Card>
+        </div>
+
+        {/* Users Table */}
+        <Card className="overflow-hidden">
+          {loading ? (
+            <div className="p-8 text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="p-8 text-center">
+              <Users className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+              <p className="text-slate-600">No users found</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">User</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Role</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Joined</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-slate-200">
+                  {filteredUsers.map((user) => (
+                    <tr key={user.id} className="hover:bg-slate-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="font-medium text-slate-900">{user.name}</div>
+                          <div className="text-sm text-slate-500">{user.email}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge variant={user.role === 'provider' ? 'info' : user.role === 'admin' ? 'danger' : 'neutral'} className="capitalize">
+                          {user.role}
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {getStatusBadge(user.status)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                        {new Date(user.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex space-x-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleViewUser(user)}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleEditUser(user)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          {user.status === 'active' ? (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleStatusAction(user, 'suspend')}
+                              >
+                                <AlertCircle className="w-4 h-4 text-yellow-600" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleStatusAction(user, 'ban')}
+                              >
+                                <Ban className="w-4 h-4 text-red-600" />
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleStatusAction(user, 'activate')}
+                            >
+                              <Unlock className="w-4 h-4 text-green-600" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+
+        <div className="text-sm text-slate-500 text-center">
+          Showing {filteredUsers.length} of {users.length} users
+        </div>
+      </div>
+
+      {/* User Detail Modal */}
+      {showUserDetail && selectedUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-slate-900">User Details</h3>
+              <button
+                onClick={() => setShowUserDetail(false)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Basic Info */}
+              <Card className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h4 className="text-lg font-semibold text-slate-900">{selectedUser.name}</h4>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant={selectedUser.role === 'provider' ? 'info' : selectedUser.role === 'admin' ? 'danger' : 'neutral'} className="capitalize">
+                        {selectedUser.role}
+                      </Badge>
+                      {getStatusBadge(selectedUser.status)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex items-center text-sm">
+                    <Mail className="w-4 h-4 text-slate-400 mr-2" />
+                    <span className="text-slate-600">{selectedUser.email}</span>
+                  </div>
+                  <div className="flex items-center text-sm">
+                    <Phone className="w-4 h-4 text-slate-400 mr-2" />
+                    <span className="text-slate-600">{selectedUser.phone}</span>
+                  </div>
+                  <div className="flex items-center text-sm">
+                    <MapPin className="w-4 h-4 text-slate-400 mr-2" />
+                    <span className="text-slate-600">{selectedUser.city}</span>
+                  </div>
+                  <div className="flex items-center text-sm">
+                    <Clock className="w-4 h-4 text-slate-400 mr-2" />
+                    <span className="text-slate-600">
+                      Joined {new Date(selectedUser.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+
+                {selectedUser.status !== 'active' && selectedUser.status_reason && (
+                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="text-sm font-medium text-red-900 mb-1">
+                      {selectedUser.status === 'suspended' ? 'Suspension' : 'Ban'} Reason:
+                    </div>
+                    <div className="text-sm text-red-700">{selectedUser.status_reason}</div>
+                    {selectedUser.status_updated_at && (
+                      <div className="text-xs text-red-600 mt-1">
+                        Updated {new Date(selectedUser.status_updated_at).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Card>
+
+              {/* Activity Logs */}
+              <div>
+                <h4 className="text-lg font-semibold text-slate-900 mb-4">Recent Activity</h4>
+                {activityLogs.length === 0 ? (
+                  <Card className="p-8 text-center">
+                    <Clock className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+                    <p className="text-slate-600">No activity logs yet</p>
+                  </Card>
+                ) : (
+                  <div className="space-y-3">
+                    {activityLogs.map((log) => (
+                      <Card key={log.id} className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="font-medium text-slate-900 capitalize">
+                              {log.action.replace(/_/g, ' ')}
+                            </div>
+                            <div className="text-sm text-slate-600 mt-1">
+                              By {log.admin.name} • {new Date(log.created_at).toLocaleString()}
+                            </div>
+                            {log.details && Object.keys(log.details).length > 0 && (
+                              <div className="text-xs text-slate-500 mt-2 font-mono bg-slate-50 p-2 rounded">
+                                {JSON.stringify(log.details, null, 2)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => handleEditUser(selectedUser)}
+                  className="flex-1"
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit User
+                </Button>
+                {selectedUser.status === 'active' ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleStatusAction(selectedUser, 'suspend')}
+                      className="flex-1"
+                    >
+                      <AlertCircle className="w-4 h-4 mr-2" />
+                      Suspend
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() => handleStatusAction(selectedUser, 'ban')}
+                      className="flex-1"
+                    >
+                      <Ban className="w-4 h-4 mr-2" />
+                      Ban
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    onClick={() => handleStatusAction(selectedUser, 'activate')}
+                    className="flex-1"
+                  >
+                    <Unlock className="w-4 h-4 mr-2" />
+                    Reactivate Account
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
-        </Card>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditModal && selectedUser && (
+        <EditUserModal
+          user={selectedUser}
+          onClose={() => setShowEditModal(false)}
+          onSave={handleSaveUserEdit}
+          loading={actionLoading}
+        />
+      )}
+
+      {/* Status Action Modal */}
+      {showStatusModal && selectedUser && (
+        <StatusActionModal
+          user={selectedUser}
+          action={statusAction}
+          reason={statusReason}
+          setReason={setStatusReason}
+          onClose={() => setShowStatusModal(false)}
+          onConfirm={handleConfirmStatusAction}
+          loading={actionLoading}
+        />
+      )}
+    </div>
+  );
+};
+
+interface EditUserModalProps {
+  user: User;
+  onClose: () => void;
+  onSave: (data: Partial<User>) => void;
+  loading: boolean;
+}
+
+const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, loading }) => {
+  const [formData, setFormData] = useState({
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    city: user.city,
+    role: user.role
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+        <div className="border-b border-slate-200 p-6 flex items-center justify-between">
+          <h3 className="text-xl font-bold text-slate-900">Edit User</h3>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <Input
+            label="Name"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            required
+          />
+          <Input
+            label="Email"
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            required
+          />
+          <Input
+            label="Phone"
+            value={formData.phone}
+            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+            required
+          />
+          <Input
+            label="City"
+            value={formData.city}
+            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+            required
+          />
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
+            <select
+              value={formData.role}
+              onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="client">Client</option>
+              <option value="provider">Provider</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+
+          <div className="flex space-x-3 pt-4">
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+              Cancel
+            </Button>
+            <Button type="submit" loading={loading} className="flex-1">
+              Save Changes
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+interface StatusActionModalProps {
+  user: User;
+  action: 'suspend' | 'ban' | 'activate';
+  reason: string;
+  setReason: (reason: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+  loading: boolean;
+}
+
+const StatusActionModal: React.FC<StatusActionModalProps> = ({
+  user,
+  action,
+  reason,
+  setReason,
+  onClose,
+  onConfirm,
+  loading
+}) => {
+  const actionConfig = {
+    suspend: {
+      title: 'Suspend User',
+      description: 'Temporarily suspend this user account. They will not be able to log in until reactivated.',
+      icon: AlertCircle,
+      color: 'text-yellow-600',
+      buttonText: 'Suspend Account'
+    },
+    ban: {
+      title: 'Ban User',
+      description: 'Permanently ban this user account. This is a serious action that should be used for policy violations.',
+      icon: Ban,
+      color: 'text-red-600',
+      buttonText: 'Ban Account'
+    },
+    activate: {
+      title: 'Reactivate User',
+      description: 'Restore access to this user account.',
+      icon: Unlock,
+      color: 'text-green-600',
+      buttonText: 'Reactivate Account'
+    }
+  };
+
+  const config = actionConfig[action];
+  const Icon = config.icon;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+        <div className="border-b border-slate-200 p-6 flex items-center justify-between">
+          <div className="flex items-center">
+            <Icon className={`w-6 h-6 ${config.color} mr-3`} />
+            <h3 className="text-xl font-bold text-slate-900">{config.title}</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="bg-slate-50 p-4 rounded-lg">
+            <div className="font-medium text-slate-900">{user.name}</div>
+            <div className="text-sm text-slate-600">{user.email}</div>
+          </div>
+
+          <p className="text-slate-700">{config.description}</p>
+
+          {action !== 'activate' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Reason {action === 'ban' ? '(Required)' : '(Optional)'}
+              </label>
+              <textarea
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                rows={4}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder={`Provide a reason for ${action === 'suspend' ? 'suspending' : 'banning'} this account...`}
+                required={action === 'ban'}
+              />
+            </div>
+          )}
+
+          <div className="flex space-x-3 pt-4">
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+              Cancel
+            </Button>
+            <Button
+              onClick={onConfirm}
+              loading={loading}
+              variant={action === 'ban' ? 'danger' : 'primary'}
+              disabled={action === 'ban' && !reason.trim()}
+              className="flex-1"
+            >
+              {config.buttonText}
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );
