@@ -32,6 +32,8 @@ interface Provider {
   bio: string;
   rating: number;
   city: string;
+  age?: number;
+  avatar_url?: string;
   profile_base_price: number;
   verification_status: any;
   services: any[];
@@ -213,6 +215,8 @@ const ClientDashboard = () => {
           bio: providerData?.bio || '',
           rating: providerData?.rating || 0,
           city: user.city,
+          age: user.age,
+          avatar_url: user.avatar_url,
           profile_base_price: user.profile_base_price || 0,
           verification_status: user.verification_status,
           services: activeServices,
@@ -497,11 +501,22 @@ const ClientDashboard = () => {
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
-              <Card key={i} className="p-6 animate-pulse">
-                <div className="w-16 h-16 bg-slate-200 rounded-full mb-4"></div>
-                <div className="h-4 bg-slate-200 rounded mb-2"></div>
-                <div className="h-3 bg-slate-200 rounded mb-4"></div>
-                <div className="h-8 bg-slate-200 rounded"></div>
+              <Card key={i} className="p-0 animate-pulse overflow-hidden">
+                <div className="p-6">
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-4">
+                    <div className="w-20 h-20 bg-slate-200 rounded-full"></div>
+                    <div className="flex-1 w-full">
+                      <div className="h-6 bg-slate-200 rounded mb-2"></div>
+                      <div className="h-4 bg-slate-200 rounded w-24"></div>
+                    </div>
+                  </div>
+                  <div className="h-4 bg-slate-200 rounded mb-2"></div>
+                  <div className="h-4 bg-slate-200 rounded mb-3 w-3/4"></div>
+                  <div className="h-12 bg-slate-200 rounded"></div>
+                </div>
+                <div className="bg-slate-50 px-6 py-4 border-t border-slate-100">
+                  <div className="h-10 bg-slate-200 rounded"></div>
+                </div>
               </Card>
             ))}
           </div>
@@ -515,69 +530,97 @@ const ClientDashboard = () => {
                 return (
                   <Card
                     key={provider.id}
-                    className="p-6 hover:shadow-xl transition-all cursor-pointer"
+                    className="p-0 hover:shadow-xl transition-all cursor-pointer overflow-hidden"
                     onClick={() => navigate(`/provider/${provider.id}`)}
                   >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className={`w-16 h-16 ${categoryData?.color || 'bg-slate-500'} rounded-full flex items-center justify-center`}>
-                        <Icon className="w-8 h-8 text-white" />
+                    <div className="p-6">
+                      {/* Avatar and Badges - Mobile: Stack, Desktop: Row */}
+                      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-4">
+                        {/* Avatar */}
+                        <div className="relative flex-shrink-0">
+                          {provider.avatar_url ? (
+                            <img
+                              src={provider.avatar_url}
+                              alt={provider.name}
+                              className="w-20 h-20 rounded-full object-cover border-2 border-slate-200"
+                            />
+                          ) : (
+                            <div className={`w-20 h-20 ${categoryData?.color || 'bg-slate-500'} rounded-full flex items-center justify-center`}>
+                              <Icon className="w-10 h-10 text-white" />
+                            </div>
+                          )}
+                          {provider.verification_status?.verified && (
+                            <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-green-500 rounded-full flex items-center justify-center border-2 border-white">
+                              <Shield className="w-4 h-4 text-white" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Name and Badges - Centered on mobile */}
+                        <div className="flex-1 text-center sm:text-left">
+                          <h3 className="text-xl font-semibold text-slate-900 mb-2">
+                            {provider.name}
+                          </h3>
+                          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                            <Badge variant="info" className="capitalize">
+                              {provider.category}
+                            </Badge>
+                            {provider.age && (
+                              <Badge variant="neutral" size="sm">
+                                {provider.age} years
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <Badge variant="info" className="capitalize">
-                          {provider.category}
-                        </Badge>
-                        {provider.verification_status?.verified && (
-                          <Badge variant="success" size="sm">
-                            <Shield className="w-3 h-3 mr-1" />
-                            Verified
-                          </Badge>
-                        )}
+
+                      {/* Location and Rating - Stack on mobile */}
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3 text-center sm:text-left">
+                        <div className="flex items-center justify-center sm:justify-start">
+                          <MapPin className="w-4 h-4 text-slate-400 mr-1 flex-shrink-0" />
+                          <span className="text-sm text-slate-600">{provider.city}</span>
+                        </div>
+                        <div className="flex items-center justify-center sm:justify-start">
+                          <Star className="w-4 h-4 text-yellow-400 mr-1 fill-current flex-shrink-0" />
+                          <span className="text-sm text-slate-600">
+                            {provider.rating > 0 ? provider.rating.toFixed(1) : 'New'}
+                          </span>
+                          {provider.rating > 0 && (
+                            <span className="text-xs text-slate-500 ml-1">
+                              ({Math.floor(Math.random() * 50) + 10} reviews)
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    <h3 className="text-xl font-semibold text-slate-900 mb-2">
-                      {provider.name}
-                    </h3>
+                      {/* Bio */}
+                      <p className="text-slate-600 text-sm mb-4 line-clamp-2 text-center sm:text-left">
+                        {provider.bio || 'Professional service provider'}
+                      </p>
 
-                    <div className="flex items-center mb-2">
-                      <MapPin className="w-4 h-4 text-slate-400 mr-1" />
-                      <span className="text-sm text-slate-600">{provider.city}</span>
-                    </div>
-
-                    <div className="flex items-center mb-3">
-                      <Star className="w-4 h-4 text-yellow-400 mr-1 fill-current" />
-                      <span className="text-sm text-slate-600">
-                        {provider.rating > 0 ? provider.rating.toFixed(1) : 'New'}
-                      </span>
-                      {provider.rating > 0 && (
-                        <span className="text-xs text-slate-500 ml-1">
-                          ({Math.floor(Math.random() * 50) + 10} reviews)
-                        </span>
+                      {/* Services Count */}
+                      {provider.services.length > 0 && (
+                        <div className="mb-4 text-center sm:text-left">
+                          <p className="text-xs text-slate-500">
+                            {provider.services.length} {provider.services.length === 1 ? 'service' : 'services'} available
+                          </p>
+                        </div>
                       )}
                     </div>
 
-                    <p className="text-slate-600 text-sm mb-4 line-clamp-2">
-                      {provider.bio || 'Professional service provider'}
-                    </p>
-
-                    {provider.services.length > 0 && (
-                      <div className="mb-3">
-                        <p className="text-xs text-slate-500 mb-1">
-                          {provider.services.length} {provider.services.length === 1 ? 'service' : 'services'} available
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-sm text-slate-500">Starting from</span>
-                        <div className="text-lg font-semibold text-slate-900">
-                          ₦{provider.minPrice?.toLocaleString()}/hr
+                    {/* Price and CTA - Full width bar */}
+                    <div className="bg-slate-50 px-6 py-4 border-t border-slate-100">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div className="text-center sm:text-left">
+                          <span className="text-sm text-slate-500 block">Starting from</span>
+                          <div className="text-xl font-bold text-slate-900">
+                            ₦{provider.minPrice?.toLocaleString()}/hr
+                          </div>
                         </div>
+                        <Button size="sm" className="w-full sm:w-auto">
+                          View Profile
+                        </Button>
                       </div>
-                      <Button size="sm">
-                        View Profile
-                      </Button>
                     </div>
                   </Card>
                 );
