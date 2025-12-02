@@ -29,7 +29,12 @@ import {
   Phone,
   CheckCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  FileText,
+  Download,
+  ZoomIn,
+  ChevronLeft,
+  ChevronRight as ChevronRightIcon
 } from 'lucide-react';
 
 interface SettingsSection {
@@ -258,7 +263,196 @@ const DisputeManagement: React.FC<SectionProps> = ({ onClose }) => {
   );
 };
 
+interface ProviderVerification {
+  id: string;
+  user_id: string;
+  name: string;
+  email: string;
+  phone: string;
+  city: string;
+  category: string;
+  bio: string;
+  avatar_url?: string;
+  verification_status: {
+    verified: boolean;
+    documents?: string[];
+    submitted_at?: string;
+    reviewed_at?: string;
+    reviewed_by?: string;
+    rejection_reason?: string;
+  };
+  created_at: string;
+}
+
 const VerificationWorkflow: React.FC<SectionProps> = ({ onClose }) => {
+  const { user: currentUser } = useAuth();
+  const [providers, setProviders] = useState<ProviderVerification[]>([]);
+  const [filteredProviders, setFilteredProviders] = useState<ProviderVerification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('pending');
+  const [selectedProvider, setSelectedProvider] = useState<ProviderVerification | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  useEffect(() => {
+    fetchProviders();
+  }, []);
+
+  useEffect(() => {
+    filterProviders();
+  }, [providers, searchQuery, statusFilter]);
+
+  const fetchProviders = async () => {
+    try {
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select(`
+          *,
+          providers (
+            id,
+            category,
+            bio
+          )
+        `)
+        .eq('role', 'provider')
+        .order('created_at', { ascending: false });
+
+      if (usersError) throw usersError;
+
+      const formattedProviders = usersData?.map(user => ({
+        id: user.providers?.[0]?.id || user.id,
+        user_id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        city: user.city,
+        category: user.providers?.[0]?.category || '',
+        bio: user.providers?.[0]?.bio || '',
+        avatar_url: user.avatar_url,
+        verification_status: user.verification_status || { verified: false },
+        created_at: user.created_at
+      })) || [];
+
+      setProviders(formattedProviders);
+    } catch (error) {
+      console.error('Error fetching providers:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filterProviders = () => {
+    let filtered = [...providers];
+
+    if (searchQuery) {
+      filtered = filtered.filter(p =>
+        p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.category?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    if (statusFilter === 'pending') {
+      filtered = filtered.filter(p =>
+        !p.verification_status?.verified &&
+        p.verification_status?.documents &&
+        p.verification_status.documents.length > 0
+      );
+    } else if (statusFilter === 'verified') {
+      filtered = filtered.filter(p => p.verification_status?.verified === true);
+    } else if (statusFilter === 'rejected') {
+      filtered = filtered.filter(p =>
+        p.verification_status?.rejection_reason &&
+        !p.verification_status?.verified
+      );
+    } else if (statusFilter === 'incomplete') {
+      filtered = filtered.filter(p =>
+        !p.verification_status?.documents ||
+        p.verification_status.documents.length === 0
+      );
+    }
+
+    setFilteredProviders(filtered);
+  };
+
+  const handleViewProvider = (provider: ProviderVerification) => {
+    setSelectedProvider(provider);
+    setShowDetailModal(true);
+  };
+
+  const handleVerificationAction = async (action: 'approve' | 'reject', rejectionReason?: string) => {
+    if (!selectedProvider || !currentUser) return;
+
+    setActionLoading(true);
+    try {
+      const newVerificationStatus = {
+        ...selectedProvider.verification_status,
+        verified: action === 'approve',
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: currentUser.id,
+        rejection_reason: action === 'reject' ? rejectionReason : null
+      };
+
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({
+          verification_status: newVerificationStatus
+        })
+        .eq('id', selectedProvider.user_id);
+
+      if (updateError) throw updateError;
+
+      const { error: logError } = await supabase
+        .from('user_activity_logs')
+        .insert({
+          user_id: selectedProvider.user_id,
+          admin_id: currentUser.id,
+          action: action === 'approve' ? 'verification_approved' : 'verification_rejected',
+          details: {
+            category: selectedProvider.category,
+            rejection_reason: rejectionReason
+          }
+        });
+
+      if (logError) console.error('Error logging action:', logError);
+
+      await fetchProviders();
+      setShowDetailModal(false);
+      setSelectedProvider(null);
+    } catch (error) {
+      console.error('Error updating verification:', error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const getVerificationBadge = (provider: ProviderVerification) => {
+    if (provider.verification_status?.verified) {
+      return <Badge variant="success">Verified</Badge>;
+    } else if (provider.verification_status?.rejection_reason) {
+      return <Badge variant="danger">Rejected</Badge>;
+    } else if (provider.verification_status?.documents && provider.verification_status.documents.length > 0) {
+      return <Badge variant="warning">Pending Review</Badge>;
+    } else {
+      return <Badge variant="neutral">Incomplete</Badge>;
+    }
+  };
+
+  const pendingCount = providers.filter(p =>
+    !p.verification_status?.verified &&
+    p.verification_status?.documents &&
+    p.verification_status.documents.length > 0
+  ).length;
+
+  const verifiedCount = providers.filter(p => p.verification_status?.verified).length;
+  const rejectedCount = providers.filter(p => p.verification_status?.rejection_reason).length;
+  const incompleteCount = providers.filter(p =>
+    !p.verification_status?.documents ||
+    p.verification_status.documents.length === 0
+  ).length;
+
   return (
     <div>
       <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between">
@@ -275,26 +469,524 @@ const VerificationWorkflow: React.FC<SectionProps> = ({ onClose }) => {
       </div>
 
       <div className="p-6 space-y-6">
-        <Card className="p-6 border-2 border-dashed border-slate-300">
-          <div className="text-center py-8">
-            <Shield className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-slate-900 mb-2">
-              Verification Workflow Coming Soon
-            </h3>
-            <p className="text-slate-600 mb-4">
-              Provider verification queue, document review, and approval system
+        {/* Search and Filters */}
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+            <Input
+              placeholder="Search by name, email, city, or category..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Applications</option>
+            <option value="pending">Pending Review ({pendingCount})</option>
+            <option value="verified">Verified ({verifiedCount})</option>
+            <option value="rejected">Rejected ({rejectedCount})</option>
+            <option value="incomplete">Incomplete ({incompleteCount})</option>
+          </select>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className="p-4">
+            <div className="text-sm text-slate-600">Pending Review</div>
+            <div className="text-2xl font-bold text-yellow-600">{pendingCount}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-sm text-slate-600">Verified</div>
+            <div className="text-2xl font-bold text-green-600">{verifiedCount}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-sm text-slate-600">Rejected</div>
+            <div className="text-2xl font-bold text-red-600">{rejectedCount}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-sm text-slate-600">Incomplete</div>
+            <div className="text-2xl font-bold text-slate-600">{incompleteCount}</div>
+          </Card>
+        </div>
+
+        {/* Providers Table */}
+        <Card className="overflow-hidden">
+          {loading ? (
+            <div className="p-8 text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            </div>
+          ) : filteredProviders.length === 0 ? (
+            <div className="p-8 text-center">
+              <Shield className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+              <p className="text-slate-600">No providers found</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Provider</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Category</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Submitted</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-slate-200">
+                  {filteredProviders.map((provider) => (
+                    <tr key={provider.id} className="hover:bg-slate-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          {provider.avatar_url ? (
+                            <img
+                              src={provider.avatar_url}
+                              alt={provider.name}
+                              className="w-10 h-10 rounded-full object-cover mr-3"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-semibold mr-3">
+                              {provider.name.charAt(0)}
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-medium text-slate-900">{provider.name}</div>
+                            <div className="text-sm text-slate-500">{provider.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge variant="info" className="capitalize">
+                          {provider.category}
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {getVerificationBadge(provider)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                        {provider.verification_status?.submitted_at
+                          ? new Date(provider.verification_status.submitted_at).toLocaleDateString()
+                          : 'Not submitted'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleViewProvider(provider)}
+                        >
+                          <Eye className="w-4 h-4 mr-2" />
+                          Review
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+
+        <div className="text-sm text-slate-500 text-center">
+          Showing {filteredProviders.length} of {providers.length} providers
+        </div>
+      </div>
+
+      {/* Provider Detail Modal */}
+      {showDetailModal && selectedProvider && (
+        <ProviderVerificationModal
+          provider={selectedProvider}
+          onClose={() => {
+            setShowDetailModal(false);
+            setSelectedProvider(null);
+          }}
+          onAction={handleVerificationAction}
+          loading={actionLoading}
+        />
+      )}
+    </div>
+  );
+};
+
+interface ProviderVerificationModalProps {
+  provider: ProviderVerification;
+  onClose: () => void;
+  onAction: (action: 'approve' | 'reject', rejectionReason?: string) => void;
+  loading: boolean;
+}
+
+const ProviderVerificationModal: React.FC<ProviderVerificationModalProps> = ({
+  provider,
+  onClose,
+  onAction,
+  loading
+}) => {
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
+  const [currentDocIndex, setCurrentDocIndex] = useState(0);
+
+  const documents = provider.verification_status?.documents || [];
+
+  const handleApprove = () => {
+    onAction('approve');
+  };
+
+  const handleReject = () => {
+    if (rejectionReason.trim()) {
+      onAction('reject', rejectionReason);
+      setShowRejectModal(false);
+    }
+  };
+
+  const openDocument = (docUrl: string, index: number) => {
+    setSelectedDocument(docUrl);
+    setCurrentDocIndex(index);
+  };
+
+  const navigateDocument = (direction: 'prev' | 'next') => {
+    if (direction === 'prev' && currentDocIndex > 0) {
+      setCurrentDocIndex(currentDocIndex - 1);
+      setSelectedDocument(documents[currentDocIndex - 1]);
+    } else if (direction === 'next' && currentDocIndex < documents.length - 1) {
+      setCurrentDocIndex(currentDocIndex + 1);
+      setSelectedDocument(documents[currentDocIndex + 1]);
+    }
+  };
+
+  const isAlreadyReviewed = provider.verification_status?.reviewed_at;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900">Provider Verification Review</h3>
+            <p className="text-sm text-slate-600 mt-1">Review application and documents</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Provider Information */}
+          <Card className="p-6">
+            <h4 className="text-lg font-semibold text-slate-900 mb-4">Provider Information</h4>
+            <div className="flex items-start space-x-6 mb-6">
+              {provider.avatar_url ? (
+                <img
+                  src={provider.avatar_url}
+                  alt={provider.name}
+                  className="w-24 h-24 rounded-full object-cover border-2 border-slate-200"
+                />
+              ) : (
+                <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white text-3xl font-bold">
+                  {provider.name.charAt(0)}
+                </div>
+              )}
+              <div className="flex-1">
+                <h5 className="text-xl font-bold text-slate-900 mb-2">{provider.name}</h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="flex items-center text-sm">
+                    <Mail className="w-4 h-4 text-slate-400 mr-2" />
+                    <span className="text-slate-600">{provider.email}</span>
+                  </div>
+                  <div className="flex items-center text-sm">
+                    <Phone className="w-4 h-4 text-slate-400 mr-2" />
+                    <span className="text-slate-600">{provider.phone}</span>
+                  </div>
+                  <div className="flex items-center text-sm">
+                    <MapPin className="w-4 h-4 text-slate-400 mr-2" />
+                    <span className="text-slate-600">{provider.city}</span>
+                  </div>
+                  <div className="flex items-center text-sm">
+                    <Shield className="w-4 h-4 text-slate-400 mr-2" />
+                    <Badge variant="info" className="capitalize">
+                      {provider.category}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {provider.bio && (
+              <div>
+                <h6 className="text-sm font-medium text-slate-700 mb-2">Professional Bio</h6>
+                <p className="text-slate-700 leading-relaxed">{provider.bio}</p>
+              </div>
+            )}
+
+            <div className="mt-4 pt-4 border-t border-slate-200">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">Application Status:</span>
+                <div className="flex items-center gap-2">
+                  {provider.verification_status?.verified ? (
+                    <Badge variant="success">
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                      Verified
+                    </Badge>
+                  ) : provider.verification_status?.rejection_reason ? (
+                    <Badge variant="danger">
+                      <XCircle className="w-3 h-3 mr-1" />
+                      Rejected
+                    </Badge>
+                  ) : (
+                    <Badge variant="warning">
+                      <Clock className="w-3 h-3 mr-1" />
+                      Pending Review
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              {provider.verification_status?.submitted_at && (
+                <div className="flex items-center justify-between text-sm mt-2">
+                  <span className="text-slate-600">Submitted:</span>
+                  <span className="text-slate-900">
+                    {new Date(provider.verification_status.submitted_at).toLocaleString()}
+                  </span>
+                </div>
+              )}
+              {provider.verification_status?.reviewed_at && (
+                <div className="flex items-center justify-between text-sm mt-2">
+                  <span className="text-slate-600">Reviewed:</span>
+                  <span className="text-slate-900">
+                    {new Date(provider.verification_status.reviewed_at).toLocaleString()}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {provider.verification_status?.rejection_reason && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="text-sm font-medium text-red-900 mb-1">Rejection Reason:</div>
+                <div className="text-sm text-red-700">{provider.verification_status.rejection_reason}</div>
+              </div>
+            )}
+          </Card>
+
+          {/* Documents Section */}
+          <Card className="p-6">
+            <h4 className="text-lg font-semibold text-slate-900 mb-4">
+              Verification Documents ({documents.length})
+            </h4>
+
+            {documents.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+                <p className="text-slate-600">No documents submitted</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {documents.map((docUrl, index) => (
+                  <div
+                    key={index}
+                    className="border-2 border-slate-200 rounded-lg p-4 hover:border-blue-400 transition-all cursor-pointer group"
+                    onClick={() => openDocument(docUrl, index)}
+                  >
+                    <div className="aspect-square bg-slate-100 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                      {docUrl.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+                        <img
+                          src={docUrl}
+                          alt={`Document ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <FileText className="w-12 h-12 text-slate-400" />
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-900">
+                        Document {index + 1}
+                      </span>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(docUrl, '_blank');
+                          }}
+                          className="p-1 hover:bg-slate-200 rounded transition-colors"
+                        >
+                          <Download className="w-4 h-4 text-slate-600" />
+                        </button>
+                        <button className="p-1 hover:bg-slate-200 rounded transition-colors">
+                          <ZoomIn className="w-4 h-4 text-slate-600" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Action Buttons */}
+          {!isAlreadyReviewed && documents.length > 0 && (
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={onClose}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => setShowRejectModal(true)}
+                className="flex-1"
+              >
+                <XCircle className="w-4 h-4 mr-2" />
+                Reject Application
+              </Button>
+              <Button
+                onClick={handleApprove}
+                loading={loading}
+                className="flex-1"
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Approve & Verify
+              </Button>
+            </div>
+          )}
+
+          {isAlreadyReviewed && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+              <p className="text-blue-800">
+                This application has already been reviewed on{' '}
+                {new Date(provider.verification_status?.reviewed_at || '').toLocaleString()}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Document Viewer Modal */}
+      {selectedDocument && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[60] p-4">
+          <button
+            onClick={() => setSelectedDocument(null)}
+            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+          >
+            <X className="w-6 h-6 text-white" />
+          </button>
+
+          {currentDocIndex > 0 && (
+            <button
+              onClick={() => navigateDocument('prev')}
+              className="absolute left-4 p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+            >
+              <ChevronLeft className="w-6 h-6 text-white" />
+            </button>
+          )}
+
+          {currentDocIndex < documents.length - 1 && (
+            <button
+              onClick={() => navigateDocument('next')}
+              className="absolute right-4 p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+            >
+              <ChevronRightIcon className="w-6 h-6 text-white" />
+            </button>
+          )}
+
+          <div className="max-w-5xl max-h-[90vh] w-full">
+            {selectedDocument.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+              <img
+                src={selectedDocument}
+                alt="Document"
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <div className="bg-white rounded-lg p-8 text-center">
+                <FileText className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+                <p className="text-slate-700 mb-4">Preview not available for this file type</p>
+                <Button
+                  onClick={() => window.open(selectedDocument, '_blank')}
+                  variant="outline"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download Document
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 px-4 py-2 rounded-lg">
+            <p className="text-white text-sm">
+              Document {currentDocIndex + 1} of {documents.length}
             </p>
-            <div className="text-sm text-slate-500 space-y-1">
-              <p>• Pending verification queue</p>
-              <p>• Review provider documents</p>
-              <p>• Background check integration</p>
-              <p>• Approve or reject applications</p>
-              <p>• Send verification status notifications</p>
-              <p>• Manage verification criteria</p>
+          </div>
+        </div>
+      )}
+
+      {/* Rejection Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="border-b border-slate-200 p-6 flex items-center justify-between">
+              <div className="flex items-center">
+                <XCircle className="w-6 h-6 text-red-600 mr-3" />
+                <h3 className="text-xl font-bold text-slate-900">Reject Application</h3>
+              </div>
+              <button
+                onClick={() => setShowRejectModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 p-4 rounded-lg">
+                <div className="font-medium text-slate-900">{provider.name}</div>
+                <div className="text-sm text-slate-600">{provider.email}</div>
+              </div>
+
+              <p className="text-slate-700">
+                Please provide a detailed reason for rejecting this application. The provider will be notified.
+              </p>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Rejection Reason (Required)
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                  rows={4}
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Provide specific reasons for rejection (e.g., unclear documents, missing information, quality concerns)..."
+                  required
+                />
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowRejectModal(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleReject}
+                  loading={loading}
+                  variant="danger"
+                  disabled={!rejectionReason.trim()}
+                  className="flex-1"
+                >
+                  Reject Application
+                </Button>
+              </div>
             </div>
           </div>
-        </Card>
-      </div>
+        </div>
+      )}
     </div>
   );
 };
