@@ -102,7 +102,7 @@ const AdminDashboard = () => {
         .select(`
           *,
           booking:bookings(id),
-          raised_by:users(name)
+          raised_by:users!disputes_raised_by_fkey(name)
         `)
         .order('created_at', { ascending: false });
 
