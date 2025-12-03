@@ -66,29 +66,37 @@ const ProviderProfile = () => {
         `)
         .eq('id', id)
         .eq('role', 'provider')
-        .single();
+        .maybeSingle();
 
       if (userError) throw userError;
 
-      if (!userData || !userData.providers || userData.providers.length === 0) {
+      if (!userData) {
         setProvider(null);
         setLoading(false);
         return;
       }
 
-      const providerId = userData.providers[0].id;
+      const providerData = Array.isArray(userData.providers) && userData.providers.length > 0
+        ? userData.providers[0]
+        : null;
+
+      if (!providerData) {
+        setProvider(null);
+        setLoading(false);
+        return;
+      }
 
       const { data: servicesData, error: servicesError } = await supabase
         .from('services')
         .select('*')
-        .eq('provider_id', providerId)
+        .eq('provider_id', providerData.id)
         .eq('active', true);
 
       if (servicesError) throw servicesError;
 
       const formattedProvider = {
         ...userData,
-        provider: userData.providers[0],
+        provider: providerData,
         services: servicesData || []
       };
 
