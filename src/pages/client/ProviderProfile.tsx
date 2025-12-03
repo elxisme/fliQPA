@@ -22,6 +22,7 @@ interface Provider {
   profile_base_price: number;
   verification_status: any;
   provider: {
+    id: string;
     category: string;
     bio: string;
     rating: number;
@@ -52,41 +53,49 @@ const ProviderProfile = () => {
 
   const fetchProvider = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select(`
           *,
           providers (
+            id,
             category,
             bio,
             rating
-          ),
-          services (
-            id,
-            title,
-            description,
-            price_hour,
-            price_day,
-            price_week,
-            min_booking_hours,
-            active
           )
         `)
         .eq('id', id)
         .eq('role', 'provider')
         .single();
 
-      if (error) throw error;
+      if (userError) throw userError;
+
+      if (!userData || !userData.providers || userData.providers.length === 0) {
+        setProvider(null);
+        setLoading(false);
+        return;
+      }
+
+      const providerId = userData.providers[0].id;
+
+      const { data: servicesData, error: servicesError } = await supabase
+        .from('services')
+        .select('*')
+        .eq('provider_id', providerId)
+        .eq('active', true);
+
+      if (servicesError) throw servicesError;
 
       const formattedProvider = {
-        ...data,
-        provider: data.providers?.[0] || {},
-        services: data.services?.filter(s => s.active) || []
+        ...userData,
+        provider: userData.providers[0],
+        services: servicesData || []
       };
 
       setProvider(formattedProvider);
     } catch (error) {
       console.error('Error fetching provider:', error);
+      setProvider(null);
     } finally {
       setLoading(false);
     }
