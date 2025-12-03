@@ -208,7 +208,7 @@ const ClientDashboard = () => {
           ? Math.min(...activeServices.map(s => s.price_hour || s.price_day || s.price_week).filter(Boolean))
           : user.profile_base_price || 0;
 
-        return {
+        const formattedProvider = {
           id: user.id,
           name: user.name,
           category: providerData?.category || '',
@@ -222,6 +222,8 @@ const ClientDashboard = () => {
           services: activeServices,
           minPrice
         };
+
+        return formattedProvider;
       });
 
       let filtered = formattedProviders;
@@ -572,10 +574,17 @@ const ClientDashboard = () => {
                           <h3 className="text-xl font-semibold text-slate-900 mb-2">
                             {provider.name}
                           </h3>
-                          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                            <Badge variant="info" className="capitalize">
-                              {categoryData?.name || provider.category}
-                            </Badge>
+                          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-1">
+                            {categoryData?.name && (
+                              <Badge variant="info" size="sm">
+                                {categoryData.name}
+                              </Badge>
+                            )}
+                            {!categoryData?.name && provider.category && (
+                              <Badge variant="info" size="sm">
+                                {provider.category}
+                              </Badge>
+                            )}
                             {provider.age && (
                               <Badge variant="neutral" size="sm">
                                 {provider.age} years
