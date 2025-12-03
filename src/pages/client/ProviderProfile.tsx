@@ -157,8 +157,12 @@ const ProviderProfile = () => {
                     Verified
                   </Badge>
                 )}
-                <Badge variant="info" className="capitalize">
-                  {provider.provider.category}
+                <Badge variant="info">
+                  {provider.provider.category === 'companion' ? 'Companion' :
+                   provider.provider.category === 'bouncer' ? 'Security' :
+                   provider.provider.category === 'bodyguard' ? 'Bodyguard' :
+                   provider.provider.category === 'assistant' ? 'Assistant' :
+                   provider.provider.category}
                 </Badge>
               </div>
               

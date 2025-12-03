@@ -366,53 +366,64 @@ const ClientDashboard = () => {
           </div>
 
           {/* Filter Bar */}
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center"
-            >
-              <SlidersHorizontal className="w-4 h-4 mr-2" />
-              Filters
-              {activeFilterCount > 0 && (
-                <Badge variant="info" size="sm" className="ml-2">
-                  {activeFilterCount}
-                </Badge>
-              )}
-              <ChevronDown className={`w-4 h-4 ml-2 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-            </Button>
-
-            {categories.map((category) => {
-              const Icon = category.icon;
-              return (
-                <Button
-                  key={category.id}
-                  variant={filters.category === category.id ? 'primary' : 'outline'}
-                  size="sm"
-                  onClick={() => setFilters(prev => ({
-                    ...prev,
-                    category: prev.category === category.id ? '' : category.id
-                  }))}
-                  className="flex items-center"
-                >
-                  <Icon className="w-4 h-4 mr-2" />
-                  {category.name}
-                </Button>
-              );
-            })}
-
-            {activeFilterCount > 0 && (
+          <div className="space-y-3">
+            {/* Filters Button - Always visible */}
+            <div className="flex items-center gap-3">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                onClick={handleClearFilters}
-                className="flex items-center text-slate-600"
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex items-center flex-shrink-0"
               >
-                <X className="w-4 h-4 mr-1" />
-                Clear All
+                <SlidersHorizontal className="w-4 h-4 mr-2" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <Badge variant="info" size="sm" className="ml-2">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+                <ChevronDown className={`w-4 h-4 ml-2 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
               </Button>
-            )}
+
+              {activeFilterCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearFilters}
+                  className="flex items-center text-slate-600 flex-shrink-0"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  <span className="hidden sm:inline">Clear All</span>
+                  <span className="sm:hidden">Clear</span>
+                </Button>
+              )}
+            </div>
+
+            {/* Category Tabs - Horizontal scroll on mobile */}
+            <div className="relative">
+              <div className="overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
+                <div className="flex gap-2 min-w-min">
+                  {categories.map((category) => {
+                    const Icon = category.icon;
+                    return (
+                      <Button
+                        key={category.id}
+                        variant={filters.category === category.id ? 'primary' : 'outline'}
+                        size="sm"
+                        onClick={() => setFilters(prev => ({
+                          ...prev,
+                          category: prev.category === category.id ? '' : category.id
+                        }))}
+                        className="flex items-center whitespace-nowrap flex-shrink-0"
+                      >
+                        <Icon className="w-4 h-4 mr-2" />
+                        {category.name}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Advanced Filters Panel */}
@@ -563,7 +574,7 @@ const ClientDashboard = () => {
                           </h3>
                           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
                             <Badge variant="info" className="capitalize">
-                              {provider.category}
+                              {categoryData?.name || provider.category}
                             </Badge>
                             {provider.age && (
                               <Badge variant="neutral" size="sm">
